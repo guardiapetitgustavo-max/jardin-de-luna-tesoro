@@ -1,36 +1,38 @@
 <!doctype html>
 <html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>El jard�n de luna</title>
+<title>El jardín de luna</title>
 <style>
 *{box-sizing:border-box}body{margin:0;color:#ffebf6;background:#120d23;font:16px system-ui}canvas{width:100%;height:100dvh;display:block}header,aside,dialog,.touch{background:#1e1636ed;border:1px solid #9c709e;border-radius:18px;padding:16px;color:inherit}header{position:fixed;top:14px;left:14px}header strong{display:block;font:600 28px Georgia}header span{color:#ffbbdb}aside{position:fixed;top:14px;right:14px;max-width:46vw}button{background:#ffbddb;border:0;border-radius:12px;padding:10px 16px;color:#331731;font:700 16px system-ui;cursor:pointer;touch-action:none}dialog{width:min(460px,90vw);text-align:center}dialog h1{font:36px Georgia;margin:10px 0}dialog p{line-height:1.5}dialog::backdrop{background:#12092285}#prompt{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap}ul{text-align:left;line-height:1.65}.touch{position:fixed;bottom:72px;right:12px;display:none;gap:6px;padding:8px}.touch button{padding:9px}@media(pointer:coarse){.touch{display:flex}}@media(max-width:550px){header strong{font-size:21px}aside{top:90px;left:14px;right:auto;max-width:85vw;font-size:14px}}
+:root{color-scheme:dark}body{color:#fff2e3;background:#0b141b}header,aside,dialog,.touch{background:#101c25e8;border-color:#c7a57566;box-shadow:0 10px 34px #05090c80}header{padding:13px 22px}header strong{font:500 29px Georgia;letter-spacing:.01em}header span{color:#eccb96;font-size:14px}aside{color:#e5dcd1}button{background:linear-gradient(145deg,#f4d7a5,#c6905c);color:#241811;box-shadow:0 4px 18px #080d16a0}button:focus-visible{outline:2px solid #fff4d2;outline-offset:4px}dialog{width:min(550px,92vw);padding:clamp(20px,5vw,40px);border:1px solid #be935f;background:radial-gradient(ellipse at top,#344149,#101b22 70%);box-shadow:0 22px 90px #000d}dialog::backdrop{background:#07121991;backdrop-filter:blur(3px)}dialog h1{font:clamp(32px,7vw,51px)/1.04 Georgia;margin:12px 0;color:#fff0d5}.dedication{letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:#e9c489;margin:0 0 14px}.hint{font-size:14px;color:#d4cec3}.tickets{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0;list-style:none}.tickets li{border:1px dashed #bc985f;border-radius:11px;background:#372f2a;color:#ffe3b0;padding:9px 10px;font:17px Georgia}.tickets small{display:block;font:12px system-ui;color:#e0d5ca;margin-top:5px}.phrase{font:italic 24px/1.4 Georgia;color:#ffe5b9}.gold{color:#f3c77e}
 </style>
-<canvas aria-label="Jard�n nocturno tridimensional"></canvas>
-<header><strong>El jard�n de luna</strong><span id="count">Pistas 0 de 3</span></header>
-<aside id="goal">WASD o flechas para caminar � Espacio para saltar</aside>
+<canvas aria-label="Jardín nocturno tridimensional"></canvas>
+<header><strong>El jardín de luna</strong><span id="count">Pistas 0 de 3</span></header>
+<aside id="goal">WASD o flechas para caminar · Espacio para saltar</aside>
 <button id="prompt" hidden>Leer pista</button>
-<div class="touch"><button data-key="a"></button><button data-key="w"></button><button data-key="s"></button><button data-key="d"></button><button data-key=" ">Saltar</button></div>
+<div class="touch"><button data-key="a">←</button><button data-key="w">↑</button><button data-key="s">↓</button><button data-key="d">→</button><button data-key=" ">Saltar</button></div>
 <dialog id="panel"><h1 id="title"></h1><div id="body"></div><button id="close">Continuar</button></dialog>
 <script>
 const get=id=>document.getElementById(id);
 const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d');
 const panel=get('panel'), keys=new Set(), solid=[], scene=[];
 let player, nearby, seen, won, w,h, eyeX,eyeZ;
+const lanterns=[], trees=[], reeds=[];
 const stops=[
  {x:0,z:7,title:'Las tres puertas',line:'Cuando todo oscurezca, cruza la puerta que brilla como el sol.'},
- {x:0,z:22,title:'El estanque',line:'La luna dej� escalones en el agua. Salta sobre ellos para seguir su reflejo.'},
- {x:0,z:40,title:'Las luci�rnagas',line:'Sigue las luces hasta el mirador. All� la luna guarda seis planes para dos.'}
+ {x:0,z:22,title:'El estanque',line:'La luna dejó escalones en el agua. Salta sobre ellos para seguir su reflejo.'},
+ {x:0,z:40,title:'Las luciérnagas',line:'Sigue las luces hasta el mirador. Allí la luna guarda seis planes para dos.'}
 ];
-function reset(){player={x:0,z:2,y:0,v:0};seen=new Set();won=false;nearby=-1;get('count').textContent='Pistas 0 de 3';get('goal').textContent='WASD o flechas para caminar � Espacio para saltar';}
+function reset(){player={x:0,z:2,y:0,v:0};seen=new Set();won=false;nearby=-1;get('count').textContent='Pistas 0 de 3';get('goal').textContent='WASD o flechas para caminar · Espacio para saltar';}
 function box(x,y,z,a,b,c,color,wall=false){
  const vertices=[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]].map(([i,j,k])=>[x+(i-.5)*a,y+j*b,z+(k-.5)*c]);
  const faces=[[0,1,2,3],[1,5,6,2],[4,0,3,7],[3,2,6,7],[5,4,7,6]];
  scene.push({vertices,faces,color});
  if(wall)solid.push({x,z,a,c});
 }
-box(0,-.5,25,23,.48,55,'#292449');
-box(0,.005,25,5,.02,52,'#483857');
-box(0,.035,30,22,.035,13,'#173658');
-for(let i=0;i<6;i++)box(0,.09,24.7+i*2.05,2.45,.20,1.5,'#945fa7');
+for(let z=0;z<55;z+=2)box(0,-.5,z,23,.48,2,'#27342e');
+for(let z=0;z<53;z+=2)if(z<24||z>35)box(0,.005,z,4.5,.02,2,z%4?'#66594d':'#5c5249');
+for(let z=24;z<36;z++)box(0,.03,z,22,.035,1.05,z%2?'#202f3b':'#243b47');
+for(let i=0;i<6;i++)box(0,.09,24.7+i*2.05,2.45,.20,1.5,'#776e67');
 for(const [x,color] of [[-5,'#52dfbd'],[0,'#eab269'],[5,'#ec71a9']]){
  for(const dx of [-1.65,1.65])box(x+dx,0,15,.7,4.7,1.3,color,true);
  box(x,4.4,15,4,.55,1.3,color);
@@ -40,8 +42,7 @@ for(const x of [-5,5])box(x,0,21,5,2.6,.7,'#2d5d55',true);
 for(const x of [-10.5,10.5]){
  box(x,0,26,.9,1.7,53,'#48335d',true);
  for(let z=4;z<52;z+=4){
-  box(x*.84,0,z,.38,2.1,.45,'#744351');
-  box(x*.84,1.4,z,1.7,2,1.5,z%8?'#2c6b61':'#3c5273');
+  trees.push([x*.84,z+Math.sin(z)*1.4,4.8+Math.cos(z)*.8]);
  }
 }
 for(const s of stops){
@@ -50,7 +51,20 @@ for(const s of stops){
  box(x,1,s.z,1.2,.65,.3,'#dc9e67');
  box(x,1.68,s.z,.22,.22,.22,'#fff0a0');
 }
-box(0,0,48,7,.16,6,'#653a64');
+for(let z=5;z<47;z+=4.4){
+ for(const side of [-1,1]){
+  const x=side*(z>23&&z<36?5.8:3.3);
+  lanterns.push([x,1.45,z]);
+  box(x,0,z,.09,1.53,.09,'#42372e');
+  box(x,1.25,z,.28,.3,.28,'#b07b45');
+  box(x,1.55,z,.40,.09,.4,'#3e3028');
+ }
+}
+for(let i=0;i<54;i++){
+ const z=23.8+(i%27)*.45, x=(i<27?-1:1)*(5.4+Math.sin(i*2.3)*1.4);
+ reeds.push([x,z,.35+.65*Math.abs(Math.sin(i*7.3))]);
+}
+box(0,0,48,7,.16,6,'#665141');
 for(const x of [-3,3])box(x,0,49,.45,4,.45,'#af6185');
 box(0,3.7,49,7,.4,2,'#af6185');
 box(0,.16,48,1.9,.75,1.1,'#a96956');
@@ -63,12 +77,59 @@ function project([x,y,z]){
  const f=Math.min(h*.9,w*.83)/Math.max(.25,depth);
  return [w/2+(x-eyeX)*f,h*.58-v*f,depth];
 }
-function sky(t){
- const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#100f28');g.addColorStop(.56,'#49345e');g.addColorStop(1,'#170e22');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
- const moon=ctx.createRadialGradient(w*.77,h*.16,13,w*.77,h*.16,85);
- moon.addColorStop(0,'#eac8f5');moon.addColorStop(.28,'#d2a9e7');moon.addColorStop(.31,'#ae78c755');moon.addColorStop(1,'#ae78c700');
- ctx.fillStyle=moon;ctx.fillRect(w*.77-85,h*.16-85,170,170);
- for(let i=0;i<95;i++){ctx.fillStyle=i%3?'#d6b2df88':'#fff3e8';ctx.fillRect((i*197.123)%w,(i*79.62)%(h*.58),i%3?1:2,2);}
+function sky(){
+ const g=ctx.createLinearGradient(0,0,0,h);
+ g.addColorStop(0,'#050e21');g.addColorStop(.42,'#152940');g.addColorStop(.70,'#4b5364');g.addColorStop(1,'#172430');
+ ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+ const mx=w*.73,my=h*.17,r=Math.min(34,w*.065);
+ for(let i=0;i<130;i++){ctx.fillStyle=i%9?'#b5cada90':'#fff2d6';ctx.fillRect((i*197.123)%w,(i*79.62)%(h*.49),i%9?1:2,i%9?1:2);}
+ const halo=ctx.createRadialGradient(mx,my,0,mx,my,r*4.5);
+ halo.addColorStop(0,'#e2ebff90');halo.addColorStop(1,'#c9dfff00');
+ ctx.fillStyle=halo;ctx.fillRect(mx-r*4.5,my-r*4.5,r*9,r*9);
+ const globe=ctx.createRadialGradient(mx-r*.27,my-r*.31,0,mx,my,r);
+ globe.addColorStop(0,'#fff8e4');globe.addColorStop(1,'#becbdb');
+ ctx.fillStyle=globe;ctx.beginPath();ctx.arc(mx,my,r,0,Math.PI*2);ctx.fill();
+ ctx.save();ctx.clip();
+ for(let i=1;i<25;i++){
+  ctx.fillStyle=i%2?'#8299b120':'#ffffff39';ctx.beginPath();
+  ctx.ellipse(mx+Math.sin(i*6)*r,my+Math.cos(i*9)*r,r*(.09+(i%5)*.036),r*.09,i,0,Math.PI*2);ctx.fill();
+ }
+ ctx.restore();
+ for(let layer=0;layer<3;layer++){
+  ctx.fillStyle=['#314353','#233746','#192b35'][layer];
+  ctx.beginPath();ctx.moveTo(0,h*.65);
+  for(let i=0;i<=50;i++){const x=i*w/50,y=h*(.54+layer*.035+Math.sin(i*.27+layer)*.025+Math.cos(i*.81)*.013);ctx.lineTo(x,y);}
+  ctx.lineTo(w,h*.75);ctx.lineTo(0,h*.75);ctx.fill();
+ }
+}
+function tree(x,z,height){
+ const [sx,sy,d]=project([x,0,z]), top=project([x,height,z])[1];
+ const length=sy-top, spread=length*.29;
+ if(d<1||length<2)return;
+ ctx.fillStyle='#352d28';ctx.fillRect(sx-spread*.09,top+length*.46,spread*.18,length*.54);
+ for(let i=0;i<8;i++){
+  const cx=sx+Math.sin(i*2.2)*spread*.47,cy=top+length*(.16+i*.063),r=spread*(.48+i*.055);
+  const g=ctx.createRadialGradient(cx-r*.24,cy-r*.26,0,cx,cy,r);
+  g.addColorStop(0,i%2?'#456159':'#36504c');g.addColorStop(1,'#132b2a');
+  ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(cx,cy,r,r*.85,0,0,7);ctx.fill();
+ }
+}
+function glow(x,y,z){
+ const [sx,sy,d]=project([x,y,z]);if(d<1)return;
+ const r=Math.min(75,450/d);
+ const g=ctx.createRadialGradient(sx,sy,0,sx,sy,r);
+ g.addColorStop(0,'#ffde9cdc');g.addColorStop(.12,'#ecb15a72');g.addColorStop(1,'#eab15000');
+ ctx.fillStyle=g;ctx.fillRect(sx-r,sy-r,r*2,r*2);
+}
+function glints(time){
+ for(let i=0;i<100;i++){
+  const z=24+(i*1.247)%11.7,x=9*Math.sin(i*4.63);
+  if(Math.abs(x)<1.35)continue;
+  const [sx,sy,d]=project([x,.078,z]);if(d<1)continue;
+  const span=(9+i%13)*Math.min(1,12/d),opacity=(.13+.12*Math.sin(i+time*1.8))*(Math.abs(x-2)<3?1:.55);
+  ctx.fillStyle='rgba(195,215,226,'+opacity+')';
+  ctx.fillRect(sx-span/2+Math.sin(time+i)*3,sy,span,1);
+ }
 }
 function draw(t){
  const dpr=Math.min(devicePixelRatio,2);w=canvas.clientWidth;h=canvas.clientHeight;
@@ -84,9 +145,25 @@ function draw(t){
  }
  faces.sort((a,b)=>b.depth-a.depth);
  for(const {pts,color,shade} of faces){
-  ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fillStyle=color;ctx.fill();
+  ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();const ys=pts.map(p=>p[1]);const y0=Math.min(...ys),y1=Math.max(...ys);
+  const surface=ctx.createLinearGradient(0,y0,0,y1+.1);surface.addColorStop(0,color);surface.addColorStop(1,color+'ad');ctx.fillStyle=surface;ctx.fill();
   ctx.fillStyle='rgba(14,7,34,'+shade+')';ctx.fill();
  }
+ glints(t);
+ const orderedTrees=trees.filter(p=>p[1]>eyeZ+1).sort((a,b)=>b[1]-a[1]);
+ for(const item of orderedTrees)tree(...item);
+ for(const [x,z,length] of reeds){
+  const [sx,sy,d]=project([x,.08,z]);if(d<1)continue;
+  const [tx,ty]=project([x+.15,length,z]);
+  ctx.strokeStyle='#486552';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(sx,sy);ctx.quadraticCurveTo(sx,ty,tx,ty);ctx.stroke();
+ }
+ for(const item of lanterns)glow(...item);
+ stops.forEach((stop,i)=>{
+  const [px,py,d]=project([i===1?2:-1.8,2.18,stop.z]);
+  if(d<2||d>19)return;
+  ctx.font='600 13px system-ui';ctx.textAlign='center';ctx.fillStyle=seen.has(i)?'#bfe2cd':'#ffe1a0';
+  ctx.fillText(seen.has(i)?'✓':String(i+1),px,py);
+ });
  for(let i=0;i<39;i++){
   const z=4+i*1.24, x=Math.sin(i*2.4+t*.8)*(z>39?2.8:7.2),[sx,sy,dep]=project([x,1.6+Math.cos(i+t)*.5,z]);
   if(dep<2)continue;
@@ -116,17 +193,17 @@ function update(dt){
  if(player.z>23.7&&player.z<35.55&&!onStone&&player.y<.06){player.x=0;player.z=22.8;get('goal').textContent='Vuelve a saltar sobre las piedras para cruzar.';}
  nearby=stops.findIndex(s=>Math.hypot(player.x-s.x,player.z-s.z)<1.65);
  if(Math.hypot(player.x,player.z-47)<2.4)nearby=3;
- const button=get('prompt');button.hidden=nearby<0;button.textContent=nearby===3?'Abrir cofre � E':'Leer pista � E';
+ const button=get('prompt');button.hidden=nearby<0;button.textContent=nearby===3?'Abrir cofre · E':'Leer pista · E';
 }
 function openPanel(title,html){get('title').textContent=title;get('body').innerHTML=html;keys.clear();panel.showModal();}
 function interact(){
  if(nearby<0||panel.open)return;
  if(nearby===3){
   if(seen.size<3){openPanel('El cofre espera','<p>Lee las tres pistas para abrir el tesoro.</p>');return;}
-  won=true;openPanel('El tesoro de los dos','<ul><li>Helado para dos</li><li>Noche de cine</li><li>Postre sorpresa</li><li>Noche de juegos</li><li>Paseo juntos</li><li>Comod�n para cualquier plan</li></ul><p>Elige un cup�n y dime cu�ndo lo usamos.</p>');get('close').textContent='Volver a jugar';return;
+  won=true;openPanel('El tesoro de los dos','<p class="dedication">Hecho para ti, Kimberly</p><ul class="tickets"><li>Helado para dos<small>Tú eliges el sabor</small></li><li>Noche de cine<small>Tú eliges la película</small></li><li>Postre sorpresa<small>Yo lo preparo</small></li><li>Noche de juegos<small>Tú eliges qué jugamos</small></li><li>Paseo juntos<small>Tú eliges el lugar</small></li><li>Comodín<small>Un plan a tu elección</small></li></ul><p>Elige un cupón y dime cuándo lo usamos.</p>');get('close').textContent='Volver a jugar';return;
  }
  seen.add(nearby);get('count').textContent='Pistas '+seen.size+' de 3';
- openPanel(stops[nearby].title,'<p>'+stops[nearby].line+'</p>');
+ openPanel(stops[nearby].title,'<p class="phrase">«'+stops[nearby].line+'»</p>');
 }
 get('prompt').onclick=interact;
 get('close').onclick=()=>panel.close();
@@ -140,7 +217,8 @@ for(const button of document.querySelectorAll('[data-key]')){
 }
 let prior=0;
 function frame(ms){update(prior?Math.min(.04,(ms-prior)/1000):0);prior=ms;draw(ms/1000);requestAnimationFrame(frame);}
-openPanel('El jard�n de luna','<p>Lee tres pistas, cruza el estanque y encuentra un cofre con seis cupones.</p><p>WASD o flechas � Espacio para saltar � E para leer</p>');
-get('close').textContent='Entrar al jard�n';
+openPanel('El jardín de luna','<p class="dedication">Para Kimberly</p><p>Hice este jardín para ti. Sigue las luciérnagas, lee las tres pistas y cruza el estanque para descubrir lo que dejé en el mirador.</p><p class="hint">WASD o flechas · Espacio para saltar · E para leer</p>');
+get('close').textContent='Entrar al jardín';
 requestAnimationFrame(frame);
 </script></html>
+
