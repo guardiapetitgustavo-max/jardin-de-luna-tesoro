@@ -1106,7 +1106,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   });
 
   // ================================================================ Celebración final: farolillos, fuegos artificiales y un corazón de luz
-  const fiesta = { activa: false, t: 0 };
+  const fiesta = { activa: false, t: 0, siempre: false };
   {
     // farolillos de papel que suben al cielo
     const n = alta ? 70 : 40, r = azar(2024);
@@ -1165,13 +1165,13 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       const t = fiesta.t;
       farolillos.visible = fuegos.visible = corazon.visible = true;
       datos.forEach((d, i) => {
-        const tt = Math.max(0, t - d.retraso);
+        const tt = Math.max(0, t - d.retraso) % 40; // vuelven a salir desde el mirador
         v3.set(d.x + Math.sin(tt * 0.5 + d.f) * 0.6, d.y0 + tt * d.v, d.z + Math.cos(tt * 0.4 + d.f) * 0.6);
         mtx.compose(v3, q, tt > 0 ? uno : v3.clone().set(0.001, 0.001, 0.001));
         farolillos.setMatrixAt(i, mtx);
       });
       farolillos.instanceMatrix.needsUpdate = true;
-      if (t < 30) { proximo -= dt; if (proximo <= 0) { estallar(); proximo = 0.7 + r() * 0.9; } }
+      if (t < 30 || fiesta.siempre) { proximo -= dt; if (proximo <= 0) { estallar(); proximo = 0.7 + r() * 0.9; } }
       for (let i = 0; i < nP; i++) {
         if (edadF[i] > 3) continue;
         edadF[i] += dt;
@@ -1191,7 +1191,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       luzFiesta.intensity = 6 + Math.sin(t * 5) * 1.5;
     });
   }
-  const celebrar = () => { fiesta.activa = true; fiesta.t = 0; };
+  // siempre=true: los fuegos no se acaban mientras se mira el cielo del final
+  const celebrar = (siempre = false) => { if (!fiesta.activa) fiesta.t = 0; fiesta.activa = true; fiesta.siempre = siempre; };
 
   // ================================================================ Detalles que pasan solos
   const eventos = { alEstrella: null, alPez: null };

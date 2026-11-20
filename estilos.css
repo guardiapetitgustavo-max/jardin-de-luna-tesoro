@@ -73,6 +73,12 @@ h1 { font: 600 clamp(44px, 9vw, 92px)/.95 var(--serif); margin: 14px 0 10px; let
 #cartel strong { display: block; font: 600 clamp(38px, 7vw, 74px)/1 var(--serif); color: #fff3df; margin-top: 10px; text-shadow: 0 4px 40px rgba(0, 0, 0, .9), 0 0 50px rgba(255, 190, 110, .35); }
 #cartel::after { content: ""; display: block; width: 120px; height: 1px; margin: 18px auto 0; background: linear-gradient(90deg, transparent, var(--oro), transparent); }
 #ayudaRaton { position: absolute; bottom: 14px; right: 18px; margin: 0; font-size: 13px; color: rgba(255, 241, 220, .55); pointer-events: none !important; }
+#dedicatoriaFinal { position: fixed; left: 50%; top: 13%; transform: translate(-50%, 8px); text-align: center; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 2.4s ease, transform 2.4s ease; width: min(92vw, 820px); text-shadow: 0 2px 30px rgba(0, 0, 0, .85); }
+#dedicatoriaFinal.ver { opacity: 1; transform: translate(-50%, 0); }
+#dedicatoriaFinal .para { margin: 10px 0 4px; font: 600 clamp(46px, 9vw, 96px)/1 var(--serif); color: #fff3df; text-shadow: 0 2px 30px rgba(0, 0, 0, .8), 0 0 50px rgba(255, 190, 120, .45); }
+#dedicatoriaFinal .autor { margin: 0; font: italic 500 clamp(22px, 3.6vw, 34px) var(--serif); color: #f3dcc0; }
+#volverFinal { position: fixed; left: 50%; bottom: 7%; transform: translateX(-50%); margin: 0; white-space: nowrap; font: 600 13px var(--sans); letter-spacing: .14em; color: rgba(255, 240, 220, .75); text-shadow: 0 1px 12px rgba(0, 0, 0, .9); opacity: 0; transition: opacity 2s ease; pointer-events: none; z-index: 6; }
+#volverFinal.ver { opacity: 1; }
 #fundido { position: fixed; inset: 0; background: #02060c; opacity: 0; pointer-events: none; z-index: 8; transition: opacity .35s ease; }
 
 /* Táctil */
@@ -104,17 +110,9 @@ dialog p { margin: 0 0 18px; }
 dialog .suave { color: #d6cec2; font-size: 15px; }
 .controles { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; text-align: left; margin: 0 auto 24px; max-width: 380px; font-size: 15px; }
 .controles kbd { font: 700 13px var(--sans); background: rgba(255, 241, 220, .1); border: 1px solid var(--borde); border-radius: 7px; padding: 2px 8px; white-space: nowrap; justify-self: start; }
-.cupones { list-style: none; padding: 0; margin: 0 0 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cupones li { position: relative; text-align: left; padding: 14px 16px; border-radius: 14px; background: linear-gradient(160deg, #3b2f27, #2a221d); border: 1px dashed rgba(242, 194, 122, .7); font: 600 21px/1.15 var(--serif); color: #ffe2ae; animation: aparece .5s ease both; }
-.cupones li small { display: block; font: 400 13px var(--sans); color: #e3d8c9; margin-top: 4px; }
-.cupones li::after { content: ""; position: absolute; right: -7px; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%; background: #121c25; border-left: 1px dashed rgba(242, 194, 122, .7); }
-@media (max-width: 460px) { .cupones { grid-template-columns: 1fr; } }
 
 /* Final */
 #hud.cine > *:not(#aviso) { visibility: hidden; }
-.carta { text-align: left; font: 500 clamp(19px, 2.6vw, 23px)/1.5 var(--serif); color: #fff1dc; min-height: 260px; margin-bottom: 22px; }
-.carta p { margin: 0 0 12px; }
-.carta .firma { text-align: right; font-style: italic; color: var(--oro); margin-top: 18px; }
 
 #btnFoto { right: 132px; font-size: 18px; }
 #barraFoto { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: none; align-items: center; gap: 12px; padding: 10px 12px 10px 20px; border-radius: 999px; background: var(--vidrio); border: 1px solid var(--borde); backdrop-filter: blur(10px); z-index: 6; }

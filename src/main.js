@@ -95,6 +95,7 @@ addEventListener('keydown', (e) => {
     if ((k === 'e' || k === 'enter') && !e.repeat) interactuar();
     if ((k === 'escape' || k === 'p') && !e.repeat) pausar();
     if (k === 'f' && !e.repeat) alternarFoto();
+  } else if (modo === 'cine' && !e.repeat) { salirCielo(); return;
   } else if (modo === 'foto' && !e.repeat) {
     if (k === 'f' || k === 'escape') alternarFoto();
     if (k === ' ' || k === 'enter') guardarFoto();
@@ -110,6 +111,7 @@ const girar = (dx, dy, k = 0.0026) => {
 };
 let arrastre = null;
 lienzo.addEventListener('pointerdown', (e) => {
+  if (modo === 'cine') { salirCielo(); return; }
   if (modo !== 'juego' && modo !== 'foto') return;
   if (e.pointerType === 'mouse' && !document.pointerLockElement && !parametros.has('prueba')) {
     lienzo.requestPointerLock?.()?.catch?.(() => {});
@@ -259,7 +261,7 @@ function leerPista(i) {
   if (nueva && i === 2) $('filaRosas').classList.remove('oculta');
 }
 function abrirCofre() {
-  if (estado.cofre) { mostrarCupones(); return; }
+  if (estado.cofre) { iniciarCine(); return; }
   if (!puedeAbrir()) {
     const faltan = [];
     const np = D.PISTAS.length - pistasLeidas();
@@ -272,57 +274,47 @@ function abrirCofre() {
   mundo.cofre.abrir();
   sonidos.final();
   aviso('El cofre se abre…', 2);
-  setTimeout(() => { mundo.celebrar(); iniciarCine(); }, 1500);
+  setTimeout(iniciarCine, 2600); // primero se ve abrirse el cofre, luego se sube al cielo
 }
-// ---------------------------------------------------------------- Final: cinemática, carta y créditos
+// ---------------------------------------------------------------- Final: la cámara sube al cielo, sin pantallas
 let cine = null;
+const cineDesde = new THREE.Vector3(), cineMira = new THREE.Vector3(), cineA = new THREE.Vector3(), cineB = new THREE.Vector3();
 function iniciarCine() {
+  if (cine) return;
   if (document.pointerLockElement) document.exitPointerLock();
-  cine = { t: 0, dur: 9 };
+  mundo.celebrar(true);
+  cineDesde.copy(camara.position);
+  cineMira.copy(cam.foco);
+  cine = { t: 0, dur: 8 };
   modo = 'cine';
+  teclas.clear(); palanca.x = palanca.y = 0; palanca.activa = false;
   $('hud').classList.add('cine');
   aviso('Mira el cielo…', 3);
   setTimeout(() => sonidos.logro(), 2500);
+  setTimeout(() => { if (cine) $('dedicatoriaFinal').classList.add('ver'); }, 4500);
+  setTimeout(() => { if (cine) $('volverFinal').classList.add('ver'); }, 15000);
 }
 function pasoCine(dt) {
   cine.t += dt;
-  const M = mundo.mirador, u = Math.min(1, cine.t / cine.dur);
-  const ang = Math.PI + u * 1.6, radio = 9 - u * 2;
-  camara.position.set(M.x + Math.cos(ang) * radio, M.y + 2.2 + u * 2.5, M.z + Math.sin(ang) * radio);
-  camara.lookAt(M.x + 2, M.y + 3.5 + u * 3, M.z);
-  if (cine.t >= cine.dur) {
-    cine = null;
+  const M = mundo.mirador, t = cine.t;
+  const u = Math.min(1, t / cine.dur), s = u * u * (3 - 2 * u);
+  // destino: detrás del mirador, mirando hacia arriba donde estallan los fuegos y suben los farolillos
+  const d = t * 0.04;
+  cineA.set(M.x - 8 + Math.sin(d) * 1.2, M.y + 5 + Math.sin(t * 0.3) * 0.3, M.z + Math.cos(d * 0.8) * 1.5);
+  cineB.set(M.x + 10, M.y + 16 + Math.sin(t * 0.21) * 0.8, M.z + Math.sin(t * 0.13) * 2.5);
+  camara.position.lerpVectors(cineDesde, cineA, s);
+  camara.lookAt(cineA.lerpVectors(cineMira, cineB, s));
+}
+function salirCielo() {
+  if (!cine || cine.t < 6) return;
+  cine = null;
+  mundo.celebrar(false);
+  $('dedicatoriaFinal').classList.remove('ver');
+  $('volverFinal').classList.remove('ver');
+  fundido(() => {
     $('hud').classList.remove('cine');
-    modo = 'juego';
     colocarJugador(mundo.cofre.x - 1.2, mundo.cofre.z, 0);
-    mostrarCarta();
-  }
-}
-function mostrarCarta() {
-  abrirPanel({ sub: 'Una carta para ti', titulo: 'Para Kimberly', cuerpo: '<div class="carta" id="carta"></div>', botones: [{ texto: 'Abrir el tesoro', accion: () => setTimeout(mostrarCupones, 250) }] });
-  const caja = $('carta'), parrafos = [...D.CARTA, D.FIRMA];
-  let i = 0, j = 0, p = null;
-  const escribir = () => {
-    if (!panel.open || !caja.isConnected) return;
-    if (i >= parrafos.length) return;
-    if (!p) { p = document.createElement('p'); if (i === parrafos.length - 1) p.className = 'firma'; caja.appendChild(p); }
-    p.textContent = parrafos[i].slice(0, ++j);
-    if (j >= parrafos[i].length) { i++; j = 0; p = null; setTimeout(escribir, 420); } else setTimeout(escribir, 22);
-  };
-  escribir();
-}
-function mostrarCreditos() {
-  abrirPanel({
-    sub: 'Fin', titulo: 'Gracias por jugar',
-    cuerpo: `<p class="frase">«${D.TITULO}»</p><p class="suave">Un juego hecho por Mika para ${D.DESTINATARIA}.<br>Modelos y texturas: Poly Haven (CC0) y modelos propios hechos en Blender.<br>Música y sonidos creados con código.</p>`,
-    botones: [{ texto: 'Seguir paseando' }, { texto: 'Ver la celebración otra vez', accion: () => { mundo.celebrar(); iniciarCine(); } }],
-  });
-}
-function mostrarCupones() {
-  abrirPanel({
-    sub: `Hecho para ti, ${D.DESTINATARIA}`, titulo: 'El tesoro de los dos',
-    cuerpo: `<ul class="cupones">${D.CUPONES.map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
-    botones: [{ texto: 'Continuar', accion: () => setTimeout(mostrarCreditos, 250) }],
+    modo = 'juego';
   });
 }
 function atraparLuciernaga(l) {
@@ -363,7 +355,7 @@ function buscarCercano() {
   const p = jugador.pos;
   for (const a of mundo.atriles) if (Math.hypot(p.x - a.x, p.z - a.z) < 1.9) return { tipo: 'atril', atril: a, texto: a.leida ? 'Volver a leer' : 'Leer la pista' };
   const c = mundo.cofre;
-  if (Math.hypot(p.x - c.x, p.z - c.z) < 2.1 && p.y > c.y - 0.3) return { tipo: 'cofre', texto: estado.cofre ? 'Ver el tesoro' : 'Abrir el cofre' };
+  if (Math.hypot(p.x - c.x, p.z - c.z) < 2.1 && p.y > c.y - 0.3) return { tipo: 'cofre', texto: estado.cofre ? 'Volver a mirar el cielo' : 'Abrir el cofre' };
   return null;
 }
 
@@ -662,7 +654,7 @@ function cuadro() {
   t += dt;
   if (mundo) {
     if (modo === 'portada') pasoPortada(t);
-    else if (modo === 'cine') { pasoJugador(0.0001); pasoCine(dt); }
+    else if (modo === 'cine') { pasoJugador(0.0001); if (cine) pasoCine(dt); }
     else if (modo !== 'carga') {
       if (modo === 'juego' || modo === 'panel' || modo === 'foto') pasoJugador(modo === 'juego' ? dt : 0.0001);
       if (modo === 'juego') reglas();
@@ -731,7 +723,7 @@ function comenzar(continuar) {
     personaje.objeto.visible = true;
     modo = 'juego';
     if (!continuar) {
-      abrirPanel({ sub: `Para ${D.DESTINATARIA}`, titulo: D.TITULO, cuerpo: `<p>${D.BIENVENIDA}</p>${tablaControles()}`, botones: [{ texto: 'Entrar al jardín' }] });
+      abrirPanel({ sub: `De ${D.AUTOR}, para ${D.DESTINATARIA}`, titulo: D.TITULO, cuerpo: `<p>${D.BIENVENIDA}</p>${tablaControles()}`, botones: [{ texto: 'Entrar al jardín' }] });
     } else aviso('Bienvenida de vuelta al jardín');
   });
 }
@@ -844,7 +836,10 @@ function exponerPruebas() {
     atrapar: () => mundo.luciernagas.forEach((l) => !l.atrapada && atraparLuciernaga(l)),
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
     mapaVisible: () => lienzoMapa.classList.contains('ver'),
-    saltarCine: () => { if (cine) cine.t = cine.dur; },
+    saltarCine: () => { if (cine) cine.t = Math.max(cine.t, cine.dur); },
+    salirCielo,
+    vista: () => { const d = camara.getWorldDirection(new THREE.Vector3()); return { y: camara.position.y, dy: d.y }; },
+    dedicatoria: () => document.getElementById('dedicatoriaFinal').className,
     estrella: () => mundo.eventos.alEstrella?.(),
     foto: () => alternarFoto(),
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,

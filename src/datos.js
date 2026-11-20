@@ -1,5 +1,6 @@
 // Textos y números de la aventura. Cambia aquí los mensajes sin tocar el resto del juego.
 export const DESTINATARIA = 'Kimberly';
+export const AUTOR = 'Gustavo';
 export const TITULO = 'El jardín de luna';
 export const LUCIERNAGAS_NECESARIAS = 7;
 
@@ -40,24 +41,5 @@ export const CONTROLES_TACTILES = [
   ['Arrastrar a la derecha', 'Mirar'],
   ['⤒', 'Saltar'],
   ['Botón central', 'Leer, abrir'],
-];
-
-// Carta del final (se escribe letra por letra). Cámbiala por tus propias palabras.
-export const CARTA = [
-  'Kimberly:',
-  'Si estás leyendo esto, cruzaste puertas, piedras, un laberinto y un barranco solo para llegar hasta aquí.',
-  'Este jardín lo hice pensando en ti: en lo bonito que es compartir una noche tranquila, una risa o un paseo sin prisa.',
-  'Dentro del cofre hay seis planes para los dos. Elige el que quieras primero, que yo me encargo del resto.',
-  'Gracias por jugar hasta el final.',
-];
-export const FIRMA = 'Con cariño, Mika';
-
-export const CUPONES = [
-  ['Helado para dos', 'Tú eliges el sabor'],
-  ['Noche de cine', 'Tú eliges la película'],
-  ['Postre sorpresa', 'Yo lo preparo'],
-  ['Noche de juegos', 'Tú eliges qué jugamos'],
-  ['Paseo juntos', 'Tú eliges el lugar'],
-  ['Comodín', 'Un plan a tu elección'],
 ];
 
