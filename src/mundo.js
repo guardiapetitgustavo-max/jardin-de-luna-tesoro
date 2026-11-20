@@ -102,7 +102,7 @@ function generarLaberinto() {
     const [a, b] = vec[Math.floor(r() * vec.length)];
     abierto.add(clave(id(i, j), id(a, b))); visto[id(a, b)] = true; pila.push([a, b]);
   }
-  for (let n = 0; n < 9; n++) {
+  for (let n = 0; n < 4; n++) {
     const i = 1 + Math.floor(r() * (C - 2)), j = Math.floor(r() * (R - 1));
     if (r() < 0.5) abierto.add(clave(id(i, j), id(i + 1, j))); else abierto.add(clave(id(i, j), id(i, j + 1)));
   }
@@ -485,7 +485,7 @@ export function construirMundo(escena, gltf, calidad) {
     for (const [z0, z1] of [[-12, -7.2], [-3.8, -1.7], [1.7, 3.8], [7.2, 12]]) {
       const zc = (z0 + z1) / 2, l = z1 - z0;
       colocar('SM_Seto', x, alturaTerreno(x, zc) - 0.05, zc, Math.PI / 2, new THREE.Vector3(l / 4.0, 1, 1));
-      colisiones.push({ tipo: 'b', x, z: zc, hx: 0.55, hz: l / 2, tope: 9 });
+      colisiones.push({ tipo: 'b', x, z: zc, hx: 0.55, hz: l / 2, tope: 9, camara: 2.2 });
     }
   }
 
@@ -601,22 +601,25 @@ export function construirMundo(escena, gltf, calidad) {
     const r = azar(55), setos = [], floresSeto = [];
     for (const [xc, zc, horiz, largo] of muros) {
       const y = alturaTerreno(xc, zc) - 0.05, l = largo + 0.75;
-      setos.push(matriz(xc, y, zc, horiz ? 0 : Math.PI / 2, 1, l / 4.1, 0.72));
-      colisiones.push({ tipo: 'b', x: xc, z: zc, hx: horiz ? l / 2 : 0.38, hz: horiz ? 0.38 : l / 2, tope: 9 });
+      setos.push(matriz(xc, y, zc, horiz ? 0 : Math.PI / 2, 1.5, l / 4.1, 0.72));
+      colisiones.push({ tipo: 'b', x: xc, z: zc, hx: horiz ? l / 2 : 0.38, hz: horiz ? 0.38 : l / 2, tope: 9, camara: y + 3.3 });
       for (let k = 0; k < 3; k++) {
         if (r() < 0.45) continue;
         const t = (r() - 0.5) * largo;
         const fx = horiz ? xc + t : xc + (r() - 0.5) * 0.5, fz = horiz ? zc + (r() - 0.5) * 0.5 : zc + t;
-        floresSeto.push(matriz(fx, y + 2.05 + r() * 0.15, fz, r() * 6, 0.8 + r() * 0.5));
+        floresSeto.push(matriz(fx, y + 3.15 + r() * 0.15, fz, r() * 6, 0.8 + r() * 0.5));
       }
     }
-    instanciar('SM_Seto', setos);
+    const hojaLab = new THREE.MeshStandardMaterial({ color: 0x36694a, roughness: 0.85, emissive: 0x0d2414, emissiveIntensity: 0.4 });
+    instanciar('SM_Seto', setos, { mats: { M_Hojas: hojaLab } });
     instanciar('SM_Flores', floresSeto, { sombra: false });
-    colocar('SM_ArcoEntrada', X0 - 0.2, 0, Z0 + LAB.filaEntrada * T + T / 2, 0, new THREE.Vector3(1, 0.62, 0.42));
-    colocar('SM_ArcoEntrada', X0 + C * T + 0.2, 0, Z0 + LAB.filaSalida * T + T / 2, 0, new THREE.Vector3(1, 0.62, 0.42));
+    colocar('SM_ArcoEntrada', X0 - 0.2, 0, Z0 + LAB.filaEntrada * T + T / 2, 0, new THREE.Vector3(1, 0.8, 0.42));
+    colocar('SM_ArcoEntrada', X0 + C * T + 0.2, 0, Z0 + LAB.filaSalida * T + T / 2, 0, new THREE.Vector3(1, 0.8, 0.42));
     const r2 = azar(66);
-    for (let k = 0; k < 9; k++) {
-      const i = 1 + Math.floor(r2() * (C - 2)), j = Math.floor(r2() * R);
+    const usados = new Set();
+    for (let k = 0; k < 40 && usados.size < 18; k++) {
+      const i = Math.floor(r2() * C), j = Math.floor(r2() * R);
+      if (usados.has(i + ':' + j)) continue; usados.add(i + ':' + j);
       const x = X0 + i * T + 0.45, z = Z0 + j * T + 0.45, y = alturaTerreno(x, z);
       colocar('SM_Farol', x, y, z, 0, 0.7);
       colisiones.push({ tipo: 'c', x, z, r: 0.18, tope: 9 });
@@ -988,6 +991,19 @@ export function construirMundo(escena, gltf, calidad) {
     }
     return { h, sobre };
   }
+  // Fracción del tramo foco→cámara que queda libre antes de chocar con un seto alto.
+  const camaraBloqueante = colisiones.filter((c) => c.camara);
+  function libreCamara(a, b) {
+    const pasos = 18;
+    for (let i = 1; i <= pasos; i++) {
+      const t = i / pasos, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t;
+      for (const c of camaraBloqueante) {
+        if (y > c.camara) continue;
+        if (Math.abs(x - c.x) < c.hx + 0.12 && Math.abs(z - c.z) < c.hz + 0.12) return (i - 1) / pasos;
+      }
+    }
+    return 1;
+  }
   function resolverChoques(p, radio) {
     for (const c of colisiones) {
       if (p.y >= c.tope - 0.42) continue;
@@ -1004,5 +1020,5 @@ export function construirMundo(escena, gltf, calidad) {
     if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
-  return { actualizar, alturaSuelo, resolverChoques, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
+  return { actualizar, alturaSuelo, resolverChoques, libreCamara, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

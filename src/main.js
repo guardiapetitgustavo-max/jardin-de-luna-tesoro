@@ -9,6 +9,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { construirMundo, alturaTerreno, DISENO, NIVEL_AGUA } from './mundo.js';
 import { crearPersonaje } from './personaje.js';
 import * as D from './datos.js';
+import { iniciarSonido, alternarSonido, sonidos } from './sonido.js';
 
 const $ = (id) => document.getElementById(id);
 const parametros = new URLSearchParams(location.search);
@@ -60,7 +61,7 @@ function ajustar() {
 addEventListener('resize', ajustar);
 
 // ------------------------------------------------------------------ Estado de la aventura
-const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [] });
+const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [] });
 let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
@@ -138,6 +139,7 @@ document.addEventListener('pointerlockchange', () => { $('ayudaRaton').style.opa
 }
 $('accion').addEventListener('click', () => interactuar());
 $('btnPausa').addEventListener('click', () => pausar());
+$('btnSonido').addEventListener('click', () => { iniciarSonido(); $('btnSonido').textContent = alternarSonido() ? '♪' : '✕'; });
 
 // ------------------------------------------------------------------ Interfaz
 let avisoTiempo = 0;
@@ -227,6 +229,7 @@ function leerPista(i) {
   const p = D.PISTAS[i];
   const nueva = !estado.pistas[i];
   estado.pistas[i] = true; mundo.atriles[i].marcarLeida(true); guardar();
+  sonidos.pista();
   abrirPanel({ sub: `Pista ${i + 1} de ${D.PISTAS.length}`, titulo: p.titulo, cuerpo: `<p class="frase">«${p.texto}»</p>`, botones: [{ texto: 'Continuar' }] });
   if (nueva && i === 2) $('filaRosas').classList.remove('oculta');
 }
@@ -242,6 +245,7 @@ function abrirCofre() {
   }
   estado.cofre = true; guardar();
   mundo.cofre.abrir();
+  sonidos.final();
   aviso('El cofre se abre…', 2);
   setTimeout(mostrarCupones, 1900);
 }
@@ -257,8 +261,8 @@ function atraparLuciernaga(l) {
   if (!estado.luc.includes(l.id)) estado.luc.push(l.id);
   $('filaLuc').classList.remove('oculta');
   const n = estado.luc.length;
-  if (n >= D.LUCIERNAGAS_NECESARIAS) { aviso('Las luciérnagas abren el camino al mirador'); mundo.barrera.abrir(); }
-  else aviso(`Luciérnaga ${n} de ${D.LUCIERNAGAS_NECESARIAS}`, 1.8);
+  if (n >= D.LUCIERNAGAS_NECESARIAS) { aviso('Las luciérnagas abren el camino al mirador'); mundo.barrera.abrir(); sonidos.logro(); }
+  else { aviso(`Luciérnaga ${n} de ${D.LUCIERNAGAS_NECESARIAS}`, 1.8); sonidos.objeto(); }
   guardar();
 }
 
@@ -270,11 +274,11 @@ function pisarPlaca(placa) {
     if (secuencia.length === D.ORDEN_FAROLES.length) {
       estado.faroles = true; guardar();
       aviso('¡Los cuatro faroles brillan! El puente aparece sobre el barranco', 4);
-      mundo.puente.activar();
-    } else aviso(`Farol ${secuencia.length} de 4`, 1.4);
+      mundo.puente.activar(); sonidos.logro();
+    } else { aviso(`Farol ${secuencia.length} de 4`, 1.4); sonidos.objeto(); }
   } else {
     mundo.placas.forEach((q) => { q.encender(false); q.error(); });
-    secuencia = [];
+    secuencia = []; sonidos.error();
     aviso(estado.pistas[3] ? 'Ese no era el orden. Vuelve a empezar' : 'Primero lee la pista junto a la fuente', 2.6);
   }
 }
@@ -386,7 +390,7 @@ function reglas() {
   // agua
   if (!enAgua && p.x > 21 && p.x < 38.5 && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
     enAgua = true;
-    salpicar(p.x, p.z);
+    salpicar(p.x, p.z); sonidos.agua();
     reaparecer('¡Splash! Vuelve a intentarlo saltando de piedra en piedra');
     setTimeout(() => (enAgua = false), 700);
   }
@@ -395,9 +399,9 @@ function reglas() {
   if (xAnterior < X && p.x >= X) {
     const puerta = DISENO.puertas.lugares.find((l) => Math.abs(p.z - l.z) < 1.4);
     if (puerta?.correcta) {
-      if (!estado.puerta) { estado.puerta = true; aviso('La puerta del sol te deja pasar'); puntoControl(X + 1.6, puerta.z, 0); }
+      if (!estado.puerta) { estado.puerta = true; aviso('La puerta del sol te deja pasar'); puntoControl(X + 1.6, puerta.z, 0); sonidos.logro(); }
     } else if (puerta) {
-      reaparecer('Esa puerta no brilla como el sol. Vuelve a leer la pista');
+      reaparecer('Esa puerta no brilla como el sol. Vuelve a leer la pista'); sonidos.error();
     }
   }
   if (!estado.control && p.x > DISENO.controles.puertas) puntoControl(DISENO.controles.puertas + 0.5, 0, 0);
@@ -426,8 +430,8 @@ function reglas() {
     if (!estado.rosas.includes(r.id)) estado.rosas.push(r.id);
     $('filaRosas').classList.remove('oculta');
     const n = estado.rosas.length;
-    if (n >= D.ROSAS_NECESARIAS) { mundo.reja.abrir(); aviso('La reja de rosas se abre'); }
-    else aviso(`Rosa ${n} de ${D.ROSAS_NECESARIAS}`, 1.8);
+    if (n >= D.ROSAS_NECESARIAS) { mundo.reja.abrir(); aviso('La reja de rosas se abre'); sonidos.logro(); }
+    else { aviso(`Rosa ${n} de ${D.ROSAS_NECESARIAS}`, 1.8); sonidos.objeto(); }
     guardar();
   }
   // placas de los cuatro faroles
@@ -463,7 +467,16 @@ function pasoCamara(dt) {
   const deseo = tmp2.set(cam.foco.x - Math.cos(cam.yaw) * cp * cam.distActual, cam.foco.y + sp * cam.distActual, cam.foco.z - Math.sin(cam.yaw) * cp * cam.distActual);
   const suelo = alturaTerreno(deseo.x, deseo.z) + 0.35;
   if (deseo.y < suelo) deseo.y = suelo;
-  cam.pos.lerp(deseo, 1 - Math.exp(-dt * 14));
+  // que la cámara no atraviese los setos altos del laberinto
+  const libre = mundo.libreCamara(cam.foco, deseo);
+  if (libre < 1) {
+    const largo = deseo.distanceTo(cam.foco), f = Math.max(0.12, libre - 0.06);
+    deseo.sub(cam.foco).multiplyScalar(f).add(cam.foco);
+    // si queda muy pegada, sube la cámara para mirar por encima del hombro
+    const corto = largo * f;
+    if (corto < 1.8) deseo.y += (1.8 - corto) * 0.9;
+    cam.pos.lerp(deseo, 1 - Math.exp(-dt * 30));
+  } else cam.pos.lerp(deseo, 1 - Math.exp(-dt * 14));
   camara.position.copy(cam.pos);
   camara.lookAt(cam.foco);
 }
@@ -476,7 +489,56 @@ function pasoPortada(t) {
   camara.lookAt(x + 12, 2.6, Math.sin(t * 0.1) * 2);
 }
 
+const lienzoMapa = $('mapa'), pincel = lienzoMapa.getContext('2d');
+function dibujarMapa() {
+  const L = mundo.laberinto, p = jugador.pos;
+  const dentro = p.x > L.x0 - 1 && p.x < L.x0 + L.columnas * L.celda + 0.5 && Math.abs(p.z) < 8.5;
+  lienzoMapa.classList.toggle('ver', dentro && modo === 'juego');
+  if (!dentro) return;
+  const ci = Math.floor((p.x - L.x0) / L.celda), cj = Math.floor((p.z - L.z0) / L.celda);
+  if (ci >= 0 && cj >= 0 && ci < L.columnas && cj < L.filas) {
+    const k = L.id(ci, cj);
+    if (!estado.visitadas.includes(k)) { estado.visitadas.push(k); if (estado.visitadas.length % 4 === 0) guardar(); }
+  }
+  // el mapa mira hacia adelante (+X arriba, +Z a la derecha)
+  const T = 13, W = L.filas * T, H = L.columnas * T, m = 10;
+  if (lienzoMapa.width !== W + m * 2) { lienzoMapa.width = W + m * 2; lienzoMapa.height = H + m * 2; }
+  const ctx = pincel; ctx.clearRect(0, 0, lienzoMapa.width, lienzoMapa.height);
+  const px = (j) => m + j * T, py = (i) => m + (L.columnas - 1 - i) * T;
+  const vis = new Set(estado.visitadas);
+  const visto = (i, j) => vis.has(L.id(i, j));
+  ctx.fillStyle = 'rgba(255,236,200,.13)';
+  for (const k of vis) { const i = k % L.columnas, j = Math.floor(k / L.columnas); ctx.fillRect(px(j), py(i), T, T); }
+  ctx.strokeStyle = 'rgba(140,200,140,.95)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath();
+  for (let i = 0; i < L.columnas; i++) for (let j = 0; j < L.filas; j++) {
+    if (!visto(i, j)) continue;
+    const x0 = px(j), y0 = py(i);
+    // +X (arriba)
+    if (i === L.columnas - 1 ? j !== L.filaSalida : !L.pasa(L.id(i, j), L.id(i + 1, j))) { ctx.moveTo(x0, y0); ctx.lineTo(x0 + T, y0); }
+    // -X (abajo)
+    if (i === 0 ? j !== L.filaEntrada : !L.pasa(L.id(i, j), L.id(i - 1, j))) { ctx.moveTo(x0, y0 + T); ctx.lineTo(x0 + T, y0 + T); }
+    // +Z (derecha)
+    if (j === L.filas - 1 || !L.pasa(L.id(i, j), L.id(i, j + 1))) { ctx.moveTo(x0 + T, y0); ctx.lineTo(x0 + T, y0 + T); }
+    // -Z (izquierda)
+    if (j === 0 || !L.pasa(L.id(i, j), L.id(i, j - 1))) { ctx.moveTo(x0, y0); ctx.lineTo(x0, y0 + T); }
+  }
+  ctx.stroke();
+  // rosas ya vistas y la reja
+  for (const r of mundo.rosas) {
+    const i = Math.floor((r.x - L.x0) / L.celda), j = Math.floor((r.z - L.z0) / L.celda);
+    if (r.tomada || !visto(i, j)) continue;
+    ctx.fillStyle = '#ff7eb3'; ctx.beginPath(); ctx.arc(px(j) + T / 2, py(i) + T / 2, 3.5, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = mundo.reja.abierta ? '#8fe0b8' : '#ff7eb3'; ctx.fillRect(px(L.filaSalida) + 2, py(L.columnas - 1) - 4, T - 4, 3);
+  // jugadora
+  const jx = m + ((p.z - L.z0) / L.celda) * T, jy = m + (L.columnas - (p.x - L.x0) / L.celda) * T;
+  ctx.save(); ctx.translate(jx, jy); ctx.rotate(Math.PI - jugador.rumbo);
+  ctx.fillStyle = '#ffe2b0'; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.5, 4); ctx.lineTo(-4.5, 4); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
 function actualizarHUD() {
+  dibujarMapa();
   const [texto, punto] = objetivo();
   $('objetivo').textContent = texto;
   const nv = D.nivelEn(jugador.pos.x);
@@ -552,6 +614,7 @@ function cuadro() {
 
 // ------------------------------------------------------------------ Inicio
 function comenzar(continuar) {
+  iniciarSonido();
   const guardado = continuar ? cargarGuardado() : null;
   estado = guardado || nuevoEstado();
   if (!continuar) try { localStorage.removeItem(CLAVE); } catch {}
@@ -629,6 +692,7 @@ function exponerPruebas() {
     jugador: () => ({ x: jugador.pos.x, y: jugador.pos.y, z: jugador.pos.z, suelo: jugador.enSuelo }),
     atrapar: () => mundo.luciernagas.forEach((l) => !l.atrapada && atraparLuciernaga(l)),
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
+    mapaVisible: () => lienzoMapa.classList.contains('ver'),
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
     placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
     nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),
