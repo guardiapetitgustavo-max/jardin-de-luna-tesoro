@@ -52,8 +52,6 @@ export const CARTA = [
 ];
 export const FIRMA = 'Con cariño, Mika';
 
-export const CUPON_SECRETO = ['Cupón secreto', 'Un deseo que tú elijas'];
-
 export const CUPONES = [
   ['Helado para dos', 'Tú eliges el sabor'],
   ['Noche de cine', 'Tú eliges la película'],

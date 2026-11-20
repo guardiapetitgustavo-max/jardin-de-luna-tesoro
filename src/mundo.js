@@ -37,8 +37,6 @@ export const DISENO = {
   // plataformas del puente: [x, z, mov. lateral, mov. vertical]
   puente: [[85.6, 0, 0, 0], [87.4, 0, 0.7, 0], [89.3, 0, 0, 0.3], [90.6, 0, 0, 0]],
   luciernagas: [[94.5, -4.2, 1.1], [96.4, 3.6, 1.4], [98.2, -6.4, 1.0], [100.3, 6.2, 1.3], [102.4, -1.8, 1.6], [104.6, 5.1, 0.9], [106.8, -5.6, 1.2]],
-  // corazones de cristal escondidos (x, z, altura sobre el suelo); tres más van en el laberinto
-  corazones: [[3.4, -6.6, 0.9], [13.2, 8.4, 0.9], [17.6, -7.6, 0.9], [21.6, 8.6, 0.9], [33.1, 0.2, 2.0], [80.9, -4.9, 0.9], [87.4, 0, 1.6], [103.2, -8.2, 0.9], [116.9, 2.4, 1.5]],
   barrera: 109.4,
   mirador: { x: 114.8, z: 0 },
   faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 71.3, 83.4, 92.3, 96.8, 101.2, 105.6, 108.6],
@@ -130,8 +128,7 @@ function generarLaberinto() {
     if (rosas.every((o) => Math.abs(o.i - c.i) + Math.abs(o.j - c.j) > 5)) rosas.push(c);
     if (rosas.length === 3) break;
   }
-  const extras = callejones.filter((c) => !rosas.includes(c)).slice(0, 3);
-  return { pasa, id, rosas, dist, extras };
+  return { pasa, id, rosas, dist };
 }
 
 // ------------------------------------------------------------------ Texturas realistas (triplanar: no necesitan UV)
@@ -294,6 +291,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
         const im = new THREE.InstancedMesh(p.geometria, mat(p.material, opc.mats, p.original), grupo.length);
         grupo.forEach((m, i) => im.setMatrixAt(i, m));
         im.castShadow = opc.sombra !== false; im.receiveShadow = true;
+        im.name = nombre;
         im.computeBoundingSphere();
         g.add(im);
       }
@@ -357,7 +355,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   const sc = luzLuna.shadow.camera; sc.left = -24; sc.right = 24; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 160;
   luzLuna.shadow.bias = -0.0004; luzLuna.shadow.normalBias = 0.04;
   escena.add(luzLuna, luzLuna.target);
-  const POOL = alta ? 10 : 6;
+  const POOL = alta ? 6 : 4;
   const luces = [];
   for (let i = 0; i < POOL; i++) { const l = new THREE.PointLight(0xffb870, 0, 11, 2); escena.add(l); luces.push(l); }
 
@@ -425,7 +423,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   const uAgua = { tiempo: { value: 0 } };
   const agua = new Reflector(new THREE.PlaneGeometry(18, 26), {
     clipBias: 0.003,
-    textureWidth: Math.round(innerWidth * (alta ? 0.6 : 0.35)), textureHeight: Math.round(innerHeight * (alta ? 0.6 : 0.35)),
+    textureWidth: Math.round(innerWidth * (alta ? 0.4 : 0.25)), textureHeight: Math.round(innerHeight * (alta ? 0.4 : 0.25)),
     color: 0x8899aa,
     shader: {
       name: 'AguaLuna',
@@ -713,7 +711,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       setos.push(REAL ? matriz(xc, y, zc, horiz ? 0 : Math.PI / 2, 1.03, l / 2.75, 1.05) : matriz(xc, y, zc, horiz ? 0 : Math.PI / 2, 1.5, l / 4.1, 0.72));
       colisiones.push({ tipo: 'b', x: xc, z: zc, hx: horiz ? l / 2 : 0.38, hz: horiz ? 0.38 : l / 2, tope: 9, camara: y + 3.3 });
       for (let k = 0; k < 3; k++) {
-        if (r() < 0.45) continue;
+        if (r() < 0.75) continue;
         const t = (r() - 0.5) * largo;
         const fx = horiz ? xc + t : xc + (r() - 0.5) * 0.5, fz = horiz ? zc + (r() - 0.5) * 0.5 : zc + t;
         floresSeto.push(matriz(fx, y + 3.15 + r() * 0.15, fz, r() * 6, 0.8 + r() * 0.5));
@@ -882,18 +880,20 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
 
   // ================================================================ Árboles, arbustos, flores, rocas y hongos
   {
-    const r = azar(21), a1 = [], a2 = [], arb = [], flo = [], roc = [], hongos = [];
+    const r = azar(21), a1 = [], a2 = [], lejanos1 = [], lejanos2 = [], arb = [], flo = [], roc = [], hongos = [];
     const libre = (x, z, minS) => distSendero(x, z) > minS && !(x > 20.5 && x < 38.6 && Math.abs(z) < 12.5)
       && Math.hypot(x - DISENO.mirador.x, z) > 6 && !(x > LAB.x0 - 1.5 && x < LAB.x0 + LAB.columnas * LAB.celda + 1.5 && Math.abs(z) < 10.5)
       && Math.abs(x - B.centro) > 4.2 && Math.hypot(x - P.x, z - P.z) > 7;
-    const total = alta ? 520 : 300;
-    for (let i = 0; i < total * 5 && a1.length + a2.length < total; i++) {
+    const total = alta ? 330 : 200;
+    for (let i = 0; i < total * 5 && a1.length + a2.length + lejanos1.length + lejanos2.length < total; i++) {
       const x = -14 + r() * 150, z = (r() < 0.5 ? -1 : 1) * (4.6 + Math.pow(r(), 0.8) * 42);
       if (!libre(x, z, 3.2)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 2 && Math.abs(z) < 13) continue;
       if (Math.abs(x - DISENO.arco) < 1.5 && Math.abs(z) < 10.5) continue;
       const e = 0.85 + r() * 0.55 + Math.min(0.5, Math.abs(z) / 60);
-      (r() < 0.55 ? a1 : a2).push(matriz(x, alturaTerreno(x, z) - 0.1, z, r() * 6.3, e));
+      const tipo1 = r() < 0.55;
+      const destino = Math.abs(z) > 13 ? (tipo1 ? lejanos1 : lejanos2) : (tipo1 ? a1 : a2);
+      destino.push(matriz(x, alturaTerreno(x, z) - 0.1, z, r() * 6.3, e));
       if (Math.abs(z) < 11) colisiones.push({ tipo: 'c', x, z, r: 0.38 * e, tope: 99 });
     }
     if (REAL) {
@@ -904,16 +904,16 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
         p.setFromMatrixPosition(m);
         if (Math.abs(p.z) < 15 && cerca.length < limite) cerca.push(m.clone().multiply(new THREE.Matrix4().makeScale(0.8, 0.8, 0.8))); else dest.push(m);
       }
-      instanciar('SM_ArbolReal', cerca); instanciar('SM_Arbol1', lejos1, { sombra: false }); instanciar('SM_Arbol2', lejos2, { sombra: false });
-    } else { instanciar('SM_Arbol1', a1); instanciar('SM_Arbol2', a2); }
-    for (let i = 0; i < 2000 && arb.length < (alta ? 190 : 120); i++) {
+      instanciar('SM_ArbolReal', cerca); instanciar('SM_Arbol1', [...lejos1, ...lejanos1], { sombra: false }); instanciar('SM_Arbol2', [...lejos2, ...lejanos2], { sombra: false });
+    } else { instanciar('SM_Arbol1', a1); instanciar('SM_Arbol2', a2); instanciar('SM_Arbol1', lejanos1, { sombra: false }); instanciar('SM_Arbol2', lejanos2, { sombra: false }); }
+    for (let i = 0; i < 2000 && arb.length < (alta ? 120 : 80); i++) {
       const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
       if (!libre(x, z, 1.9)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 1.3 && Math.abs(z) < 12) continue;
       arb.push(matriz(x, alturaTerreno(x, z) - 0.05, z, r() * 6, 0.8 + r() * 0.6));
     }
-    instanciar(REAL ? 'SM_BolaSeto' : 'SM_Arbusto', arb);
-    for (let i = 0; i < 4000 && flo.length < (alta ? 460 : 260); i++) {
+    instanciar(REAL ? 'SM_BolaSeto' : 'SM_Arbusto', arb, { sombra: false });
+    for (let i = 0; i < 4000 && flo.length < (alta ? 220 : 130); i++) {
       const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
       if (!libre(x, z, 1.4)) continue;
       flo.push(matriz(x, alturaTerreno(x, z) - 0.02, z, r() * 6, 0.8 + r() * 0.7));
@@ -955,7 +955,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   // ================================================================ Pasto con viento (por tramos)
   const uPasto = { tiempo: { value: 0 } };
   {
-    const hoja = new THREE.PlaneGeometry(0.055, 1, 1, 4);
+    const hoja = new THREE.PlaneGeometry(0.06, 1, 1, 2);
     hoja.translate(0, 0.5, 0);
     const p = hoja.attributes.position, nor = hoja.attributes.normal;
     for (let i = 0; i < p.count; i++) {
@@ -978,7 +978,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAlto;')
         .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(.28, 1.15, vAlto);');
     };
-    const n = alta ? 90000 : 28000, r = azar(33);
+    const n = alta ? 36000 : 14000, r = azar(33);
     const c1 = new THREE.Color(0x3d6b3a), c2 = new THREE.Color(0x5a7f45), c3 = new THREE.Color(0x2f5a45);
     const tramos = new Map();
     let k = 0;
@@ -998,9 +998,11 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     }
     for (const lista of tramos.values()) {
       const im = new THREE.InstancedMesh(mata, matPasto, lista.length);
+      im.name = 'pasto';
       lista.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
       im.receiveShadow = true;
       im.computeBoundingSphere();
+      im.layers.set(1); // el reflejo del estanque no dibuja el pasto
       escena.add(im);
     }
   }
@@ -1193,29 +1195,6 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
 
   // ================================================================ Detalles que pasan solos
   const eventos = { alEstrella: null, alPez: null };
-  // corazones de cristal
-  const corazones = [];
-  {
-    const forma = new THREE.Shape();
-    forma.moveTo(0, -0.12); forma.bezierCurveTo(-0.02, -0.07, -0.14, -0.04, -0.14, 0.04);
-    forma.bezierCurveTo(-0.14, 0.12, -0.05, 0.14, 0, 0.07); forma.bezierCurveTo(0.05, 0.14, 0.14, 0.12, 0.14, 0.04);
-    forma.bezierCurveTo(0.14, -0.04, 0.02, -0.07, 0, -0.12);
-    const geo = new THREE.ExtrudeGeometry(forma, { depth: 0.06, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 2, curveSegments: 10 }).center();
-    const matC = new THREE.MeshPhysicalMaterial({ color: 0xff6aa8, emissive: 0xff3d8a, emissiveIntensity: 1.2, roughness: 0.1, metalness: 0, clearcoat: 1, transparent: true, opacity: 0.92 });
-    const lugares = DISENO.corazones.map(([x, z, h]) => [x, z, h]);
-    for (const c of laberinto.extras) lugares.push([LAB.x0 + c.i * LAB.celda + LAB.celda / 2, LAB.z0 + c.j * LAB.celda + LAB.celda / 2, 0.9]);
-    lugares.forEach(([x, z, h], id) => {
-      const base = x > 84.5 && x < 91 ? -0.2 + 0.36 : x > 22.8 && x < 36.2 && Math.abs(z) < 2 ? NIVEL_AGUA + 0.35 : alturaTerreno(x, z);
-      const y = base + h;
-      const m = new THREE.Mesh(geo, matC);
-      m.add(sprite(lineal(1.1, 0.3, 0.6), 0.9));
-      m.position.set(x, y, z);
-      escena.add(m);
-      const c = { id, x, y, z, malla: m, tomado: false, tomar() { this.tomado = true; m.visible = false; } };
-      actualizables.push(({ t }) => { if (!c.tomado) { m.rotation.y = t * 1.6 + id; m.position.y = y + Math.sin(t * 2 + id) * 0.07; } });
-      corazones.push(c);
-    });
-  }
   // estrellas fugaces
   {
     const geo = new THREE.PlaneGeometry(1, 1);
@@ -1295,6 +1274,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   let reloj = 0;
   function actualizar(t, dt, camara, foco, jugador) {
     uCielo.tiempo.value = t; uAgua.tiempo.value = t; uPasto.tiempo.value = t;
+    agua.visible = camara.position.x > 4 && camara.position.x < 56;
     luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 330);
     haloLuna.position.copy(luna.position);
     for (const f of actualizables) f({ t, dt, camara, jugador });
@@ -1357,5 +1337,5 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
-  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, corazones, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
+  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

@@ -22,22 +22,26 @@ const CLAVE = 'jardinDeLuna.v2';
 
 // ------------------------------------------------------------------ Render
 const lienzo = $('lienzo');
-const renderer = new THREE.WebGLRenderer({ canvas: lienzo, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: parametros.has('prueba') });
-let escalaPixel = Math.min(devicePixelRatio, alta ? 1.6 : 1.25);
+const renderer = new THREE.WebGLRenderer({ canvas: lienzo, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: parametros.has('prueba') });
+const escalaMax = Math.min(devicePixelRatio, alta ? 1.35 : 1.1);
+let escalaPixel = escalaMax;
 renderer.setPixelRatio(escalaPixel);
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.info.autoReset = false;
 
 const escena = new THREE.Scene();
 const camara = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 900);
+camara.layers.enable(1); // capa 1: pasto (no se refleja en el agua)
 
-const composer = new EffectComposer(renderer);
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: alta ? 4 : 0 }));
 composer.addPass(new RenderPass(escena, camara));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight).multiplyScalar(alta ? 0.6 : 0.4), 0.5, 0.45, 0.9);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight).multiplyScalar(alta ? 0.5 : 0.35), 0.5, 0.45, 0.9);
 composer.addPass(bloom);
 const pasoFinal = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, tiempo: { value: 0 }, fuerza: { value: 0.32 } },
@@ -63,7 +67,7 @@ function ajustar() {
 addEventListener('resize', ajustar);
 
 // ------------------------------------------------------------------ Estado de la aventura
-const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], corazones: [], deseos: 0 });
+const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], deseos: 0 });
 let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
@@ -317,7 +321,7 @@ function mostrarCreditos() {
 function mostrarCupones() {
   abrirPanel({
     sub: `Hecho para ti, ${D.DESTINATARIA}`, titulo: 'El tesoro de los dos',
-    cuerpo: `<ul class="cupones">${[...D.CUPONES, ...(estado.corazones.length >= mundo.corazones.length ? [D.CUPON_SECRETO] : [])].map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
+    cuerpo: `<ul class="cupones">${D.CUPONES.map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
     botones: [{ texto: 'Continuar', accion: () => setTimeout(mostrarCreditos, 250) }],
   });
 }
@@ -396,7 +400,7 @@ const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 let t = 0, xAnterior = 0, enAgua = false;
 const caidas = { estanque: 0, puente: 0 };
 const ambiente = { buho: 15, rana: 3 };
-let fps = { cuadros: 0, tiempo: 0, revisado: false };
+let fps = { cuadros: 0, tiempo: 0 }, cuadroN = 0;
 
 function pasoJugador(dt) {
   // dirección deseada relativa a la cámara
@@ -513,16 +517,6 @@ function reglas() {
     if (placa && placa !== placaPisada) pisarPlaca(placa);
     placaPisada = placa || null;
   }
-  // corazones de cristal escondidos
-  tmp.copy(p); tmp.y += 1.0;
-  for (const c of mundo.corazones) {
-    if (c.tomado || tmp.distanceTo(c.malla.position) > 0.95) continue;
-    c.tomar(); if (!estado.corazones.includes(c.id)) estado.corazones.push(c.id);
-    $('filaCor').classList.remove('oculta'); sonidos.corazon();
-    const n = estado.corazones.length, total = mundo.corazones.length;
-    aviso(n >= total ? '¡Encontraste todos los corazones! El cofre guarda un cupón secreto' : `Corazón de cristal ${n} de ${total}`, n >= total ? 4 : 2);
-    guardar();
-  }
   // sonidos del ambiente
   ambiente.buho -= 1 / 60; ambiente.rana -= 1 / 60;
   if (ambiente.buho <= 0) { sonidos.buho(); ambiente.buho = 25 + Math.random() * 30; }
@@ -631,7 +625,6 @@ function actualizarHUD() {
   const nv = D.nivelEn(jugador.pos.x);
   $('zona').textContent = nv.final ? nv.nombre : `Nivel ${nv.numero} · ${nv.nombre}`;
   $('cRosas').textContent = estado.rosas.length;
-  $('cCor').textContent = estado.corazones.length; $('tCor').textContent = `/ ${mundo.corazones.length} corazones`;
   $('cPistas').textContent = pistasLeidas();
   $('cLuc').textContent = estado.luc.length;
   const cerca = buscarCercano();
@@ -663,7 +656,9 @@ function actualizarHUD() {
 }
 
 function cuadro() {
-  const dt = Math.min(0.05, reloj.getDelta());
+  const dtReal = reloj.getDelta(), dt = Math.min(0.05, dtReal);
+  cuadroN++;
+  renderer.shadowMap.needsUpdate = cuadroN % 2 === 0;
   t += dt;
   if (mundo) {
     if (modo === 'portada') pasoPortada(t);
@@ -688,13 +683,19 @@ function cuadro() {
     if (avisoTiempo > 0) { avisoTiempo -= dt; if (avisoTiempo <= 0) $('aviso').classList.remove('ver'); }
     if (cartelTiempo > 0) { cartelTiempo -= dt; if (cartelTiempo <= 0) $('cartel').classList.remove('ver'); }
     pasoFinal.uniforms.tiempo.value = t;
+    renderer.info.reset();
     composer.render(dt);
-    // calidad adaptable: si va lento, baja la resolución
-    if (modo === 'juego' && !fps.revisado) {
-      fps.cuadros++; fps.tiempo += dt;
-      if (fps.tiempo > 4) {
-        const medio = fps.cuadros / fps.tiempo; fps.revisado = true;
-        if (medio < 40 && escalaPixel > 0.85) { escalaPixel = Math.max(0.85, escalaPixel * 0.75); ajustar(); fps = { cuadros: 0, tiempo: 0, revisado: false }; }
+    // calidad adaptable: cada 2 s ajusta la resolución para mantener el juego fluido
+    if (modo === 'juego' || modo === 'cine') {
+      fps.cuadros++; fps.tiempo += dtReal;
+      if (fps.tiempo > 2) {
+        const medio = fps.cuadros / fps.tiempo;
+        fps.cuadros = 0; fps.tiempo = 0;
+        let nueva = escalaPixel;
+        if (medio < 48) nueva = Math.max(0.6, escalaPixel * 0.85);
+        else if (medio > 58 && escalaPixel < escalaMax) nueva = Math.min(escalaMax, escalaPixel * 1.07);
+        if (Math.abs(nueva - escalaPixel) > 0.01) { escalaPixel = nueva; ajustar(); }
+        if (medio < 30 && escalaPixel <= 0.61 && bloom.enabled) bloom.enabled = false;
       }
     }
   }
@@ -716,8 +717,6 @@ function comenzar(continuar) {
   }
   if (estado.luc.length >= D.LUCIERNAGAS_NECESARIAS) mundo.barrera.abrir(true);
   for (const r of mundo.rosas) if (estado.rosas.includes(r.id)) r.tomar();
-  for (const c of mundo.corazones) if (estado.corazones.includes(c.id)) c.tomar();
-  $('filaCor').classList.toggle('oculta', !estado.corazones.length);
   if (estado.rosas.length >= D.ROSAS_NECESARIAS) mundo.reja.abrir(true);
   secuencia = [];
   if (estado.faroles) { mundo.placas.forEach((q) => q.encender(true)); mundo.puente.activar(true); }
@@ -773,6 +772,7 @@ async function iniciar() {
   $('cargaTexto').textContent = 'Plantando el jardín…'; barra.style.width = '78%';
   await new Promise((r) => setTimeout(r, 30));
   mundo = construirMundo(escena, gltf, calidad, real, texs);
+  mundo.esReal = !!real;
   mundo.eventos.alEstrella = () => {
     if (modo !== 'juego') return;
     estado.deseos++; sonidos.estrella();
@@ -802,7 +802,33 @@ async function iniciar() {
   $('btnContinuar').onclick = () => comenzar(true);
   $('btnComenzar').onclick = () => comenzar(false);
   $('btnControles').onclick = () => abrirPanel({ titulo: 'Cómo se juega', cuerpo: `<p class="suave">${D.BIENVENIDA}</p>${tablaControles()}`, botones: [{ texto: 'Volver' }] });
-  if (parametros.has('prueba')) exponerPruebas();
+  if (parametros.has('prueba') || parametros.has('tour')) exponerPruebas();
+  if (parametros.has('tour')) recorrido();
+}
+
+// ------------------------------------------------------------------ Recorrido automático (?tour): muestra cada zona y los cuadros por segundo
+function recorrido() {
+  const caja = document.createElement('div');
+  caja.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:50;font:700 16px monospace;color:#fff;background:rgba(0,0,0,.6);padding:8px 12px;border-radius:8px';
+  document.body.appendChild(caja);
+  let cuadros = 0, ultimo = performance.now(), fpsTxt = '';
+  const medir = () => { cuadros++; const ahora = performance.now(); if (ahora - ultimo > 1000) { fpsTxt = `${Math.round((cuadros * 1000) / (ahora - ultimo))} fps`; cuadros = 0; ultimo = ahora; } requestAnimationFrame(medir); };
+  medir();
+  const vistas = [[0.5, 0, 0, 0.22, 'Entrada'], [11, 0, 0, 0.15, 'Puertas'], [21.8, 0, 0, 0.3, 'Estanque'], [40, -1, 0, 0.25, 'Laberinto'], [52, -5, 0.4, 0.3, 'Dentro del laberinto'], [71.5, 0, 0, 0.3, 'Plaza'], [83.4, 0, 0, 0.3, 'Puente'], [93, 0, 0, 0.2, 'Bosque'], [110.6, 0, 0, 0.3, 'Mirador']];
+  let i = 0;
+  setTimeout(() => {
+    comenzar(false);
+    setTimeout(() => {
+      cerrarPanel();
+      const siguiente = () => {
+        const [x, z, giro, pitch, nombre] = vistas[i % vistas.length];
+        colocarJugador(x, z, giro); cam.pitch = pitch;
+        caja.dataset.zona = nombre; i++;
+      };
+      siguiente(); setInterval(siguiente, 7000);
+      setInterval(() => { const r = renderer.info.render; caja.textContent = `${caja.dataset.zona} · ${fpsTxt} · ${(r.triangles / 1e6).toFixed(2)} M triángulos · ${r.calls} llamadas · ${mundo ? (mundo.esReal ? 'realista' : 'simple') : ''}`; }, 500);
+    }, 1500);
+  }, 1500);
 }
 
 // ------------------------------------------------------------------ Ganchos para pruebas automáticas (?prueba)
@@ -819,13 +845,22 @@ function exponerPruebas() {
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
     mapaVisible: () => lienzoMapa.classList.contains('ver'),
     saltarCine: () => { if (cine) cine.t = cine.dur; },
-    corazones: () => mundo.corazones.map((c) => ({ x: c.x, y: c.y, z: c.z, tomado: c.tomado })),
     estrella: () => mundo.eventos.alEstrella?.(),
     foto: () => alternarFoto(),
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
     placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
     nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),
     info: () => renderer.info.render,
+    desglose: () => {
+      const m = {};
+      escena.traverse((o) => {
+        if (!o.isMesh || !o.visible) return;
+        const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3, n = o.isInstancedMesh ? o.count : 1;
+        const k = o.name || o.parent?.name || o.material.type;
+        m[k] = (m[k] || 0) + t * n;
+      });
+      return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${k}: ${(v / 1000).toFixed(0)}k`);
+    },
     // avanza el juego con pasos fijos de 1/60 s (sin depender de la velocidad del navegador de pruebas)
     simular: (segundos, keys = [], saltarEn = -1) => {
       keys.forEach((k) => teclas.add(k));
