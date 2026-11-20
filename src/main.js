@@ -36,10 +36,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.info.autoReset = false;
 
 const escena = new THREE.Scene();
-const camara = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 900);
+// lo que está a más de ~100 m ya lo tapa la niebla: no se dibuja (el cielo se pinta aparte, siempre al fondo)
+const camara = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, alta ? 105 : 90);
 camara.layers.enable(1); // capa 1: pasto (no se refleja en el agua)
 
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: alta ? 4 : 0 }));
+// sin MSAA en el composer: en algunas tarjetas el multimuestreo en media precisión deja la pantalla en blanco
+const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(escena, camara));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight).multiplyScalar(alta ? 0.5 : 0.35), 0.5, 0.45, 0.9);
 composer.addPass(bloom);
@@ -56,15 +58,57 @@ const pasoFinal = new ShaderPass({
 });
 composer.addPass(pasoFinal);
 composer.addPass(new OutputPass());
+// suavizado de bordes (FXAA) barato, después de pasar a color de pantalla
+const pasoSuave = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, paso: { value: new THREE.Vector2(1 / 1920, 1 / 1080) } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 paso; varying vec2 vUv;
+    float lum(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
+    void main(){
+      vec3 m = texture2D(tDiffuse, vUv).rgb;
+      float lNW = lum(texture2D(tDiffuse, vUv + vec2(-1., -1.) * paso).rgb), lNE = lum(texture2D(tDiffuse, vUv + vec2(1., -1.) * paso).rgb);
+      float lSW = lum(texture2D(tDiffuse, vUv + vec2(-1., 1.) * paso).rgb), lSE = lum(texture2D(tDiffuse, vUv + vec2(1., 1.) * paso).rgb);
+      float lM = lum(m), lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+      if (lMax - lMin < max(.0312, lMax * .125)) { gl_FragColor = vec4(m, 1.); return; }
+      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+      float red = max((lNW + lNE + lSW + lSE) * .03125, 1. / 128.);
+      dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + red), vec2(-8.), vec2(8.)) * paso;
+      vec3 a = .5 * (texture2D(tDiffuse, vUv + dir * (1. / 3. - .5)).rgb + texture2D(tDiffuse, vUv + dir * (2. / 3. - .5)).rgb);
+      vec3 b = a * .5 + .25 * (texture2D(tDiffuse, vUv - dir * .5).rgb + texture2D(tDiffuse, vUv + dir * .5).rgb);
+      float lB = lum(b);
+      gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, 1.);
+    }`,
+});
+composer.addPass(pasoSuave);
 
+// Si la tarjeta gráfica deja la imagen en blanco (o negra) con los efectos, se apagan solos y se dibuja directo.
+let sinPost = parametros.has('sinefectos'), revisiones = 0, malas = 0;
+const pixel = new Uint8Array(4);
+function revisarPantalla() {
+  revisiones++;
+  const gl = renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+  let blancos = 0;
+  for (const [fx, fy] of [[0.2, 0.3], [0.5, 0.5], [0.8, 0.3], [0.3, 0.75], [0.7, 0.75]]) {
+    gl.readPixels(Math.floor(w * fx), Math.floor(h * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    if (pixel[0] > 238 && pixel[1] > 238 && pixel[2] > 238) blancos++;
+  }
+  if (blancos < 5) { malas = 0; return; }
+  if (++malas < 2) return;
+  malas = 0;
+  if (bloom.enabled) { bloom.enabled = false; console.warn('Pantalla en blanco: se apaga el resplandor'); revisiones = 0; }
+  else if (!sinPost) { sinPost = true; console.warn('Pantalla en blanco: se dibuja sin efectos'); revisiones = 0; }
+}
 function ajustar() {
   camara.aspect = innerWidth / innerHeight; camara.updateProjectionMatrix();
   renderer.setPixelRatio(escalaPixel);
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setPixelRatio(escalaPixel);
   composer.setSize(innerWidth, innerHeight);
+  const b = new THREE.Vector2(); renderer.getDrawingBufferSize(b);
+  pasoSuave.uniforms.paso.value.set(1 / b.x, 1 / b.y);
 }
 addEventListener('resize', ajustar);
+ajustar(); // tamaño correcto desde el primer cuadro (si no, los efectos quedaban de 1×1 y la pantalla salía de un solo color)
 
 // ------------------------------------------------------------------ Estado de la aventura
 const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], deseos: 0 });
@@ -261,7 +305,7 @@ function leerPista(i) {
   if (nueva && i === 2) $('filaRosas').classList.remove('oculta');
 }
 function abrirCofre() {
-  if (estado.cofre) { iniciarCine(); return; }
+  if (estado.cofre) { mostrarCupones(); return; }
   if (!puedeAbrir()) {
     const faltan = [];
     const np = D.PISTAS.length - pistasLeidas();
@@ -274,9 +318,29 @@ function abrirCofre() {
   mundo.cofre.abrir();
   sonidos.final();
   aviso('El cofre se abre…', 2);
-  setTimeout(iniciarCine, 2600); // primero se ve abrirse el cofre, luego se sube al cielo
+  setTimeout(mostrarCarta, 2600); // primero se ve abrirse el cofre, luego sale la carta
 }
-// ---------------------------------------------------------------- Final: la cámara sube al cielo, sin pantallas
+// ---------------------------------------------------------------- Final: carta, cupones y luego la cámara sube al cielo
+function mostrarCarta() {
+  abrirPanel({ sub: 'Una carta para ti', titulo: `Para ${D.DESTINATARIA}`, cuerpo: '<div class="carta" id="carta"></div>', botones: [{ texto: 'Abrir el tesoro', accion: () => setTimeout(mostrarCupones, 250) }] });
+  const caja = $('carta'), parrafos = [...D.CARTA, D.FIRMA];
+  let i = 0, j = 0, p = null;
+  const escribir = () => {
+    if (!panel.open || !caja.isConnected) return;
+    if (i >= parrafos.length) return;
+    if (!p) { p = document.createElement('p'); if (i === parrafos.length - 1) p.className = 'firma'; caja.appendChild(p); }
+    p.textContent = parrafos[i].slice(0, ++j);
+    if (j >= parrafos[i].length) { i++; j = 0; p = null; setTimeout(escribir, 420); } else setTimeout(escribir, 22);
+  };
+  escribir();
+}
+function mostrarCupones() {
+  abrirPanel({
+    sub: `De ${D.AUTOR}, para ${D.DESTINATARIA}`, titulo: 'El tesoro de los dos',
+    cuerpo: `<ul class="cupones">${D.CUPONES.map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
+    botones: [{ texto: 'Mirar el cielo', accion: () => setTimeout(iniciarCine, 300) }],
+  });
+}
 let cine = null;
 const cineDesde = new THREE.Vector3(), cineMira = new THREE.Vector3(), cineA = new THREE.Vector3(), cineB = new THREE.Vector3();
 function iniciarCine() {
@@ -676,7 +740,8 @@ function cuadro() {
     if (cartelTiempo > 0) { cartelTiempo -= dt; if (cartelTiempo <= 0) $('cartel').classList.remove('ver'); }
     pasoFinal.uniforms.tiempo.value = t;
     renderer.info.reset();
-    composer.render(dt);
+    if (sinPost) renderer.render(escena, camara); else composer.render(dt);
+    if (modo === 'juego' && cuadroN % 60 === 30 && revisiones < 6) revisarPantalla();
     // calidad adaptable: cada 2 s ajusta la resolución para mantener el juego fluido
     if (modo === 'juego' || modo === 'cine') {
       fps.cuadros++; fps.tiempo += dtReal;
@@ -684,10 +749,10 @@ function cuadro() {
         const medio = fps.cuadros / fps.tiempo;
         fps.cuadros = 0; fps.tiempo = 0;
         let nueva = escalaPixel;
-        if (medio < 48) nueva = Math.max(0.6, escalaPixel * 0.85);
+        if (medio < 48) nueva = Math.max(alta ? 0.75 : 0.65, escalaPixel * 0.9);
         else if (medio > 58 && escalaPixel < escalaMax) nueva = Math.min(escalaMax, escalaPixel * 1.07);
         if (Math.abs(nueva - escalaPixel) > 0.01) { escalaPixel = nueva; ajustar(); }
-        if (medio < 30 && escalaPixel <= 0.61 && bloom.enabled) bloom.enabled = false;
+        if (medio < 30 && escalaPixel <= (alta ? 0.76 : 0.66) && bloom.enabled) bloom.enabled = false;
       }
     }
   }
@@ -775,6 +840,7 @@ async function iniciar() {
   escena.add(personaje.objeto);
   orbeJugador = new THREE.PointLight(0xfff0a0, 0, 6, 2);
   escena.add(orbeJugador);
+  personaje.objeto.traverse((o) => o.layers.enable(2)); orbeJugador.layers.enable(2); // ella también se refleja en el agua
   colocarJugador(DISENO.inicio.x, DISENO.inicio.z, 0);
   barra.style.width = '92%'; $('cargaTexto').textContent = 'Encendiendo los faroles…';
   await new Promise((r) => setTimeout(r, 30));
@@ -845,7 +911,22 @@ function exponerPruebas() {
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
     placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
     nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),
-    info: () => renderer.info.render,
+    info: () => ({ triangulos: renderer.info.render.triangles, llamadas: renderer.info.render.calls, escala: escalaPixel, realista: !!mundo?.esReal, bloom: bloom.enabled, sinPost }),
+    experimento: (cfg) => { if ('reflejo' in cfg) mundo.agua.userData.apagado = !cfg.reflejo; if ('sombras' in cfg) { renderer.shadowMap.enabled = cfg.sombras; escena.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true)); }); } if ('bloom' in cfg) bloom.enabled = cfg.bloom; return true; },
+    medirReflejo: () => new Promise((r) => {
+      const ag = mundo.agua, f = ag.onBeforeRender;
+      ag.onBeforeRender = function (...x) { const i = renderer.info.render, t0 = i.triangles, c0 = i.calls; f.apply(this, x); ag.onBeforeRender = f; r({ tris: i.triangles - t0, llamadas: i.calls - c0 }); };
+      setTimeout(() => r('sin reflejo en este cuadro'), 1500);
+    }),
+    capa: (n) => {
+      const m = {}, cam = new THREE.Camera(); cam.layers.set(n);
+      escena.traverse((o) => {
+        if (!o.isMesh || !o.visible || !o.layers.test(cam.layers)) return;
+        const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3, k = o.name || o.parent?.name || o.material.type;
+        m[k] = (m[k] || 0) + t * (o.isInstancedMesh ? o.count : 1);
+      });
+      return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}: ${(v / 1000).toFixed(0)}k`);
+    },
     desglose: () => {
       const m = {};
       escena.traverse((o) => {

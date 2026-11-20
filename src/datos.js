@@ -43,3 +43,21 @@ export const CONTROLES_TACTILES = [
   ['Botón central', 'Leer, abrir'],
 ];
 
+// Carta del final (se escribe letra por letra). Cámbiala por tus propias palabras.
+export const CARTA = [
+  'Kimberly:',
+  'Si estás leyendo esto, cruzaste puertas, piedras, un laberinto y un barranco solo para llegar hasta aquí.',
+  'Este jardín lo hice pensando en ti: en lo bonito que es compartir una noche tranquila, una risa o un paseo sin prisa.',
+  'Dentro del cofre hay seis planes para los dos. Elige el que quieras primero, que yo me encargo del resto.',
+  'Gracias por jugar hasta el final.',
+];
+export const FIRMA = 'Con cariño, Gustavo';
+
+export const CUPONES = [
+  ['Helado para dos', 'Tú eliges el sabor'],
+  ['Noche de cine', 'Tú eliges la película'],
+  ['Postre sorpresa', 'Yo lo preparo'],
+  ['Noche de juegos', 'Tú eliges qué jugamos'],
+  ['Paseo juntos', 'Tú eliges el lugar'],
+  ['Comodín', 'Un plan a tu elección'],
+];

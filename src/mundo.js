@@ -266,6 +266,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       m.castShadow = opc.sombra !== false; m.receiveShadow = true;
       g.add(m);
     }
+    g.name = nombre;
     g.position.set(x, y, z); g.rotation.y = giro;
     if (typeof escala === 'number') g.scale.setScalar(escala); else g.scale.copy(escala);
     if (opc.padre !== null) (opc.padre || escena).add(g);
@@ -278,7 +279,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     const tramos = new Map();
     for (const m of matrices) {
       tmpV.setFromMatrixPosition(m);
-      const k = Math.floor(tmpV.x / 24);
+      const k = Math.floor(tmpV.x / 30) + ',' + Math.floor(tmpV.z / 30);
       if (!tramos.has(k)) tramos.set(k, []);
       tramos.get(k).push(m);
     }
@@ -292,6 +293,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
         grupo.forEach((m, i) => im.setMatrixAt(i, m));
         im.castShadow = opc.sombra !== false; im.receiveShadow = true;
         im.name = nombre;
+        if (opc.reflejo === false) im.layers.set(1); // detalles pequeños: el reflejo del estanque no los dibuja
+        if (opc.soloReflejo) im.layers.set(2); // versión liviana que solo aparece reflejada en el agua
         im.computeBoundingSphere();
         g.add(im);
       }
@@ -342,9 +345,9 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   escena.background = lineal(0.045, 0.065, 0.11);
 
   const luna = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaLuna(), color: lineal(2.6, 2.6, 2.5), fog: false, depthWrite: false }));
-  luna.scale.setScalar(26); luna.renderOrder = -9;
+  luna.scale.setScalar(26 * 95 / 330); luna.renderOrder = -9; // misma luna, pero dentro de la distancia de dibujo (105 m)
   const haloLuna = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(0.35, 0.42, 0.62), fog: false, depthWrite: false, blending: THREE.AdditiveBlending, transparent: true }));
-  haloLuna.scale.setScalar(150); haloLuna.renderOrder = -8;
+  haloLuna.scale.setScalar(150 * 95 / 330); haloLuna.renderOrder = -8;
   escena.add(luna, haloLuna);
 
   // ================================================================ Luces
@@ -361,7 +364,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
 
   // ================================================================ Terreno
   {
-    const ancho = 150, largo = 120, sx = alta ? 300 : 190, sz = alta ? 240 : 150;
+    const ancho = 150, largo = 120, sx = alta ? 240 : 170, sz = alta ? 190 : 135;
     const g = new THREE.PlaneGeometry(ancho, largo, sx, sz);
     g.rotateX(-Math.PI / 2);
     g.translate(58, 0, 0);
@@ -423,7 +426,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   const uAgua = { tiempo: { value: 0 } };
   const agua = new Reflector(new THREE.PlaneGeometry(18, 26), {
     clipBias: 0.003,
-    textureWidth: Math.round(innerWidth * (alta ? 0.4 : 0.25)), textureHeight: Math.round(innerHeight * (alta ? 0.4 : 0.25)),
+    textureWidth: Math.round(innerWidth * (alta ? 0.33 : 0.22)), textureHeight: Math.round(innerHeight * (alta ? 0.33 : 0.22)),
     color: 0x8899aa,
     shader: {
       name: 'AguaLuna',
@@ -481,6 +484,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     candidatasLuz.push({ pos: new THREE.Vector3(x, y + ALTO_FAROL, z), color: new THREE.Color(0xffb36a), fuerza: REAL ? 8 : 5.5 });
   }
   instanciar(REAL ? 'SM_FarolReal' : 'SM_Farol', faroles);
+  if (REAL) instanciar('SM_Farol', faroles, { sombra: false, soloReflejo: true });
   {
     const matHalo = new THREE.SpriteMaterial({ map: halo, color: lineal(0.55, 0.32, 0.14), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const p = new THREE.Vector3();
@@ -503,6 +507,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     }
     const im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: lineal(2.6, 1.7, 0.7) }), bombillas.length);
     bombillas.forEach((q, i) => im.setMatrixAt(i, matriz(q.x, q.y, q.z)));
+    im.userData.refleja = true;
     im.computeBoundingSphere();
     escena.add(im);
   }
@@ -510,7 +515,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   // Rocas escaneadas en lugar de las rocas simples (mismas posiciones, escala ajustada a cada modelo).
   function rocasReales(matrices, extra = 1) {
     const tipos = [['SM_RocaMusgo0', 0.45], ['SM_RocaMusgo1', 0.45], ['SM_RocaMusgo2', 0.5], ['SM_RocaMusgo3', 0.45], ['SM_Roca7', 3.4], ['SM_Roca9', 6]];
-    tipos.forEach(([n, e], k) => instanciar(n, matrices.filter((_, i) => i % tipos.length === k).map((m) => m.clone().multiply(new THREE.Matrix4().makeScale(e * extra, e * extra, e * extra)))));
+    tipos.forEach(([n, e], k) => instanciar(n, matrices.filter((_, i) => i % tipos.length === k).map((m) => m.clone().multiply(new THREE.Matrix4().makeScale(e * extra, e * extra, e * extra))), { reflejo: false }));
   }
 
   // ================================================================ Nivel 1: entrada y puertas
@@ -899,12 +904,12 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (REAL) {
       // jacarandás realistas cerca del camino; los lejanos (entre la niebla) siguen siendo livianos
       const cerca = [], lejos1 = [], lejos2 = [], p = new THREE.Vector3();
-      const limite = alta ? 110 : 55;
+      const limite = alta ? 85 : 50;
       for (const [lista, dest] of [[a1, lejos1], [a2, lejos2]]) for (const m of lista) {
         p.setFromMatrixPosition(m);
         if (Math.abs(p.z) < 15 && cerca.length < limite) cerca.push(m.clone().multiply(new THREE.Matrix4().makeScale(0.8, 0.8, 0.8))); else dest.push(m);
       }
-      instanciar('SM_ArbolReal', cerca); instanciar('SM_Arbol1', [...lejos1, ...lejanos1], { sombra: false }); instanciar('SM_Arbol2', [...lejos2, ...lejanos2], { sombra: false });
+      instanciar('SM_ArbolReal', cerca); instanciar('SM_Arbol1', cerca, { sombra: false, soloReflejo: true }); instanciar('SM_Arbol1', [...lejos1, ...lejanos1], { sombra: false }); instanciar('SM_Arbol2', [...lejos2, ...lejanos2], { sombra: false });
     } else { instanciar('SM_Arbol1', a1); instanciar('SM_Arbol2', a2); instanciar('SM_Arbol1', lejanos1, { sombra: false }); instanciar('SM_Arbol2', lejanos2, { sombra: false }); }
     for (let i = 0; i < 2000 && arb.length < (alta ? 120 : 80); i++) {
       const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
@@ -912,15 +917,15 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       if (Math.abs(x - DISENO.puertas.x) < 1.3 && Math.abs(z) < 12) continue;
       arb.push(matriz(x, alturaTerreno(x, z) - 0.05, z, r() * 6, 0.8 + r() * 0.6));
     }
-    instanciar(REAL ? 'SM_BolaSeto' : 'SM_Arbusto', arb, { sombra: false });
+    instanciar(REAL ? 'SM_BolaSeto' : 'SM_Arbusto', arb, { sombra: false, reflejo: false });
     for (let i = 0; i < 4000 && flo.length < (alta ? 220 : 130); i++) {
       const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
       if (!libre(x, z, 1.4)) continue;
       flo.push(matriz(x, alturaTerreno(x, z) - 0.02, z, r() * 6, 0.8 + r() * 0.7));
     }
     if (REAL) {
-      ['SM_Vinca0', 'SM_Vinca1', 'SM_Vinca2', 'SM_Trebol0', 'SM_Trebol1', 'SM_Helecho0', 'SM_Helecho1'].forEach((n, k) => instanciar(n, flo.filter((_, i) => i % 7 === k).map((m) => m.clone().multiply(new THREE.Matrix4().makeScale(n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1))), { sombra: false }));
-    } else instanciar('SM_Flores', flo, { sombra: false });
+      ['SM_Vinca0', 'SM_Vinca1', 'SM_Vinca2', 'SM_Trebol0', 'SM_Trebol1', 'SM_Helecho0', 'SM_Helecho1'].forEach((n, k) => instanciar(n, flo.filter((_, i) => i % 7 === k).map((m) => m.clone().multiply(new THREE.Matrix4().makeScale(n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1))), { sombra: false, reflejo: false }));
+    } else instanciar('SM_Flores', flo, { sombra: false, reflejo: false });
     for (let i = 0; i < 800 && roc.length < 70; i++) {
       const x = -6 + r() * 130, z = (r() < 0.5 ? -1 : 1) * (3.5 + r() * 18);
       if (!libre(x, z, 2.2)) continue;
@@ -935,8 +940,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
         const m = matriz(x, alturaTerreno(x, z) - 0.05, z, rr() * 6, 0.8 + rr() * 0.6);
         if (i % 9 === 0) toc.push(m); else if (i % 13 === 0) tronc.push(m); else if (hel.length < 90) hel.push(m);
       }
-      instanciar('SM_Tocon', toc); instanciar('SM_TroncoCaido', tronc);
-      ['SM_Helecho0', 'SM_Helecho1', 'SM_Helecho2', 'SM_Helecho3'].forEach((n, k) => instanciar(n, hel.filter((_, i) => i % 4 === k), { sombra: false }));
+      instanciar('SM_Tocon', toc, { reflejo: false }); instanciar('SM_TroncoCaido', tronc, { reflejo: false });
+      ['SM_Helecho0', 'SM_Helecho1', 'SM_Helecho2', 'SM_Helecho3'].forEach((n, k) => instanciar(n, hel.filter((_, i) => i % 4 === k), { sombra: false, reflejo: false }));
     }
     for (let i = 0; i < 600 && hongos.length < 140; i++) {
       const x = 92 + r() * 18, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 9);
@@ -1201,7 +1206,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     const geo = new THREE.PlaneGeometry(1, 1);
     const matE = new THREE.ShaderMaterial({
       uniforms: { a: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+      // se dibuja siempre al fondo del cielo, aunque esté más lejos que la distancia de dibujo
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position.z = gl_Position.w * 0.99999; }',
       fragmentShader: 'uniform float a; varying vec2 vUv; void main(){ float l = pow(vUv.x, 3.); float w = 1. - abs(vUv.y - .5) * 2.; gl_FragColor = vec4(vec3(1.4,1.35,1.2) * l * w * w * a, 1.); }',
     });
     const estrella = new THREE.Mesh(geo, matE);
@@ -1275,8 +1281,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   let reloj = 0;
   function actualizar(t, dt, camara, foco, jugador) {
     uCielo.tiempo.value = t; uAgua.tiempo.value = t; uPasto.tiempo.value = t;
-    agua.visible = camara.position.x > 4 && camara.position.x < 56;
-    luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 330);
+    agua.visible = !agua.userData.apagado && camara.position.x > 4 && camara.position.x < 56;
+    luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 95);
     haloLuna.position.copy(luna.position);
     for (const f of actualizables) f({ t, dt, camara, jugador });
     luzLuna.target.position.copy(foco);
@@ -1337,6 +1343,18 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     p.z = Math.min(LIMITE.z, Math.max(-LIMITE.z, p.z));
     if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
+
+  // El agua solo refleja lo que de verdad se ve en ella (cielo, luna, árboles, faroles, arcos, luces y la protagonista):
+  // el resto del jardín no se dibuja dos veces. Las luces también van en la capa 2 para que el reflejo quede iluminado.
+  const REFLEJABLES = /^(SM_Arbol[12]|SM_Farol\b|SM_ArcoEntrada|SM_PuertaArco|SM_Estatua|SM_Juncos|SM_Mirador|SM_Linterna\b|SM_Nenufar|SM_PiedraEstanque)/;
+  agua.camera.layers.set(2);
+  // el reflejo se actualiza un cuadro sí y otro no: en el agua con ondas no se nota y cuesta la mitad
+  { const reflejar = agua.onBeforeRender; let n = 0; agua.onBeforeRender = function (...a) { if ((n++ & 1) === 0) reflejar.apply(this, a); }; }
+  escena.traverse((o) => {
+    let ok = o === cielo || o.isLight || (o.isSprite && o.scale.x > 0.6) || o.isPoints || o.userData.refleja, n = o;
+    while (!ok && n) { if (n.name && REFLEJABLES.test(n.name)) ok = true; n = n.parent; }
+    if (ok) o.layers.enable(2);
+  });
 
   return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

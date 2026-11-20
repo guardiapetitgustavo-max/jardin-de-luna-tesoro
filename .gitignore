@@ -3,3 +3,5 @@ __pycache__/
 unreal/
 recursos/
 tools/tripo_key.txt
+tools/capturas/
+tools/diff_perf.txt
