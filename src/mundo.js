@@ -1,48 +1,76 @@
-// Construye el jardín: terreno, cielo, agua, modelos de Blender, pasto, luces y efectos.
-// Ejes: +X es hacia adelante en el sendero, +Y arriba, Z a los lados. Unidades en metros.
+// Construye el jardín completo: cinco niveles y el mirador final.
+// Ejes: +X es hacia adelante en el recorrido, +Y arriba, Z a los lados. Unidades en metros.
+//
+//  Nivel 1  x   0–22  La entrada y las tres puertas
+//  Nivel 2  x  22–38  El estanque (piedras que se mueven y nenúfares que se hunden)
+//  Nivel 3  x  38–70  El laberinto de rosas (tres rosas abren la reja)
+//  Nivel 4  x  70–92  Los cuatro faroles (acertijo de orden) y el puente sobre el barranco
+//  Nivel 5  x  92–110 El bosque de luciérnagas (siete luces abren la cortina)
+//  Final    x 110–120 El mirador y el cofre
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const NIVEL_AGUA = -0.35;
-export const LIMITE = { xMin: -3, xMax: 61, z: 9 };
+export const LIMITE = { xMin: -3, xMax: 120, z: 9 };
 export const DIR_LUNA = new THREE.Vector3(0.85, 0.36, 0.42).normalize();
 
 // ------------------------------------------------------------------ Diseño del recorrido
+const LAB = { x0: 41, z0: -8, columnas: 14, filas: 8, celda: 2, filaEntrada: 3, filaSalida: 4 };
 export const DISENO = {
   inicio: { x: 0.5, z: 0, giro: 0 },
   arco: 5,
-  atriles: [{ x: 8, z: -2.4 }, { x: 20, z: 2.5 }, { x: 38.6, z: -2.5 }],
+  atriles: [{ x: 8, z: -2.4 }, { x: 20, z: 2.5 }, { x: 38.4, z: -2.6 }, { x: 72.6, z: -2.5 }],
   puertas: { x: 15, lugares: [{ z: -5.5, color: 0x55d6b4, nombre: 'menta' }, { z: 0, color: 0xe57aa6, nombre: 'rosa' }, { z: 5.5, color: 0xf2b252, nombre: 'sol', correcta: true }] },
-  piedras: [[23.5, 0], [25.3, 0.8], [27.1, -0.5], [28.9, 0.4, 1.3], [30.7, -0.6], [32.5, 0.5], [34.2, 0, 1.1], [35.8, -0.3]],
-  luciernagas: [[40.5, -4.2, 1.1], [42.2, 3.6, 1.4], [43.6, -6.5, 1.0], [45.1, 6.2, 1.3], [46.3, -1.8, 1.6], [47.8, 4.9, 0.9], [49.2, -5.6, 1.2]],
-  barrera: 51.3,
-  mirador: { x: 56.5, z: 0 },
-  faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 41.8, 46.2, 50.4],
-  controles: { puertas: 10.5, estanqueAntes: 21.2, estanqueDespues: 37.2 },
+  // [x, z, desplazamiento lateral (piedra móvil), tipo] — tipo 'n' = nenúfar que se hunde
+  piedras: [[23.5, 0], [25.3, 0.8], [27.1, -0.5, 0, 'n'], [28.9, 0.4, 1.3], [30.7, -0.6], [32.5, 0.5, 0, 'n'], [34.2, 0, 1.1], [35.8, -0.3]],
+  laberinto: LAB,
+  plaza: { x: 78, z: 0 },
+  // placas del acertijo: color y posición (rombo alrededor de la fuente)
+  placas: [
+    { nombre: 'rosa', color: 0xf07aae, x: 75.2, z: 0 },
+    { nombre: 'menta', color: 0x55d6b4, x: 78, z: -2.9 },
+    { nombre: 'lila', color: 0xa98cf0, x: 80.8, z: 0 },
+    { nombre: 'sol', color: 0xf2b252, x: 78, z: 2.9 },
+  ],
+  barranco: { x0: 84.5, x1: 91, centro: 87.75 },
+  // plataformas del puente: [x, z, mov. lateral, mov. vertical]
+  puente: [[85.7, 0, 0, 0], [87.6, 0, 1.5, 0], [89.5, 0, 0, 0.5]],
+  luciernagas: [[94.5, -4.2, 1.1], [96.4, 3.6, 1.4], [98.2, -6.4, 1.0], [100.3, 6.2, 1.3], [102.4, -1.8, 1.6], [104.6, 5.1, 0.9], [106.8, -5.6, 1.2]],
+  barrera: 109.4,
+  mirador: { x: 114.8, z: 0 },
+  faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 71.3, 83.4, 92.3, 96.8, 101.2, 105.6, 108.6],
+  controles: { puertas: 10.5, estanqueAntes: 21.2, estanqueDespues: 37.2, laberintoSalida: 70.6, barrancoAntes: 83.2, barrancoDespues: 92, mirador: 110.4 },
 };
 
 // ------------------------------------------------------------------ Terreno
 const suave = (t) => t * t * (3 - 2 * t);
+const paso = (a, b, x) => suave(Math.min(1, Math.max(0, (x - a) / (b - a))));
+function anchoValle(x) {
+  return 5.5 + 4.4 * (paso(36.5, 40.5, x) - paso(69.5, 72, x)) + 3 * (paso(70, 73, x) - paso(83, 85, x));
+}
 export function alturaTerreno(x, z) {
   const az = Math.abs(z);
-  const lado = Math.max(0, az - 5.5);
+  const lado = Math.max(0, az - anchoValle(x));
   let h = Math.pow(Math.min(lado, 12), 1.35) * 0.09 * (1 + 0.35 * Math.sin(x * 0.31) * Math.cos(z * 0.23));
   h += 0.12 * Math.sin(x * 0.9 + z * 0.6) * Math.min(1, lado / 2);
   h += Math.pow(Math.max(0, az - 14), 1.45) * 0.08 * (0.8 + 0.2 * Math.sin(x * 0.07 + z * 0.05));
-  h += Math.pow(Math.max(0, -5 - x), 1.4) * 0.12 + Math.pow(Math.max(0, x - 64), 1.4) * 0.14;
+  h += Math.pow(Math.max(0, -5 - x), 1.4) * 0.12 + Math.pow(Math.max(0, x - 122), 1.4) * 0.14;
   const dx = Math.max(0, Math.abs(x - 29.6) - 5.6), dz = Math.max(0, az - 9.5);
   const hondo = Math.max(0, 1 - Math.hypot(dx, dz) / 2.2);
   h -= 0.95 * suave(hondo);
-  h += 0.035 * Math.sin(x * 0.55) * Math.cos(z * 0.7) * (1 - hondo);
+  const dr = Math.abs(x - DISENO.barranco.centro);
+  const corte = 1 - paso(2.6, 3.3, dr);
+  h -= 5.5 * corte + 0.25 * Math.sin(z * 1.7 + x) * corte;
+  h += 0.035 * Math.sin(x * 0.55) * Math.cos(z * 0.7) * (1 - hondo) * (1 - corte);
   return h;
 }
+const enLaberinto = (x, z) => x > LAB.x0 - 0.5 && x < LAB.x0 + LAB.columnas * LAB.celda + 0.5 && Math.abs(z) < 8.6;
 
-// Segmentos del sendero de tierra (para pintar el terreno y evitar el pasto).
 const SENDERO = [
   [-4, 0, 11, 0], [11, 0, 15, -5.5], [11, 0, 15, 0], [11, 0, 15, 5.5],
   [15, -5.5, 19, 0], [15, 0, 19, 0], [15, 5.5, 19, 0], [19, 0, 22.6, 0],
-  [36.4, 0, 52.5, 0],
+  [36.4, 0, 41, -1], [69, 1, 84.4, 0], [91.2, 0, 110.9, 0],
 ];
 export function distSendero(x, z) {
   let m = Infinity;
@@ -51,15 +79,57 @@ export function distSendero(x, z) {
     m = Math.min(m, Math.hypot(x - ax - vx * t, z - az - vz * t));
   }
   const dm = Math.hypot(x - DISENO.mirador.x, z - DISENO.mirador.z) - 5.2;
-  return Math.min(m, Math.max(0, dm));
+  const dp = Math.hypot(x - DISENO.plaza.x, z - DISENO.plaza.z) - 4.6;
+  return Math.min(m, Math.max(0, dm), Math.max(0, dp), enLaberinto(x, z) ? 0 : Infinity);
 }
 
-// Azar reproducible
 function azar(semilla) {
   let a = semilla >>> 0;
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 const lineal = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
+
+// ------------------------------------------------------------------ Laberinto (generado siempre igual)
+function generarLaberinto() {
+  const { columnas: C, filas: R } = LAB, r = azar(1234);
+  const id = (i, j) => j * C + i, abierto = new Set(), clave = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+  const visto = new Array(C * R).fill(false), pila = [[0, LAB.filaEntrada]];
+  visto[id(0, LAB.filaEntrada)] = true;
+  while (pila.length) {
+    const [i, j] = pila[pila.length - 1];
+    const vec = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [i + a, j + b]).filter(([a, b]) => a >= 0 && b >= 0 && a < C && b < R && !visto[id(a, b)]);
+    if (!vec.length) { pila.pop(); continue; }
+    const [a, b] = vec[Math.floor(r() * vec.length)];
+    abierto.add(clave(id(i, j), id(a, b))); visto[id(a, b)] = true; pila.push([a, b]);
+  }
+  for (let n = 0; n < 9; n++) {
+    const i = 1 + Math.floor(r() * (C - 2)), j = Math.floor(r() * (R - 1));
+    if (r() < 0.5) abierto.add(clave(id(i, j), id(i + 1, j))); else abierto.add(clave(id(i, j), id(i, j + 1)));
+  }
+  const pasa = (a, b) => abierto.has(clave(a, b));
+  const dist = new Array(C * R).fill(-1), cola = [id(0, LAB.filaEntrada)]; dist[cola[0]] = 0;
+  while (cola.length) {
+    const c = cola.shift(), i = c % C, j = Math.floor(c / C);
+    for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+      if (a < 0 || b < 0 || a >= C || b >= R) continue;
+      const n = id(a, b);
+      if (dist[n] < 0 && pasa(c, n)) { dist[n] = dist[c] + 1; cola.push(n); }
+    }
+  }
+  const salidas = (i, j) => [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < C && b < R && pasa(id(i, j), id(a, b))).length;
+  const callejones = [];
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+    if ((i === 0 && j === LAB.filaEntrada) || (i === C - 1 && j === LAB.filaSalida)) continue;
+    if (salidas(i, j) === 1) callejones.push({ i, j, d: dist[id(i, j)] });
+  }
+  callejones.sort((a, b) => b.d - a.d);
+  const rosas = [];
+  for (const c of callejones) {
+    if (rosas.every((o) => Math.abs(o.i - c.i) + Math.abs(o.j - c.j) > 5)) rosas.push(c);
+    if (rosas.length === 3) break;
+  }
+  return { pasa, id, rosas, dist };
+}
 
 // ------------------------------------------------------------------ Materiales
 function crearPaleta() {
@@ -87,8 +157,8 @@ function crearPaleta() {
     M_Brillo: brillo(0xffcf6a, 3.5),
   };
 }
+const SUAVIZAR = new Set(['M_Hojas', 'M_HojasClaras', 'M_PiedraMusgo', 'M_Nenufar']);
 
-// ------------------------------------------------------------------ Texturas pequeñas hechas en un lienzo
 function texturaHalo() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -113,20 +183,17 @@ function texturaLuna() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-// Materiales orgánicos que se ven mejor con normales suaves (copas, arbustos, piedras del estanque).
-const SUAVIZAR = new Set(['M_Hojas', 'M_HojasClaras', 'M_PiedraMusgo', 'M_Nenufar']);
-
 // ------------------------------------------------------------------ Mundo
 export function construirMundo(escena, gltf, calidad) {
   const alta = calidad === 'alta';
   const paleta = crearPaleta();
   const halo = texturaHalo();
   const actualizables = [];
-  const colisiones = [];   // { tipo:'c', x, z, r, tope } | { tipo:'b', x, z, hx, hz, tope }
-  const superficies = [];  // { tipo:'c'|'b', x, z, r|hx,hz, tope, movil? }
-  const candidatasLuz = []; // { pos, color, fuerza }
+  const colisiones = [];
+  const superficies = [];
+  const candidatasLuz = [];
+  const laberinto = generarLaberinto();
 
-  // ---------- piezas del GLB
   const piezasCache = new Map();
   function piezas(nombre) {
     if (piezasCache.has(nombre)) return piezasCache.get(nombre);
@@ -155,19 +222,32 @@ export function construirMundo(escena, gltf, calidad) {
     }
     g.position.set(x, y, z); g.rotation.y = giro;
     if (typeof escala === 'number') g.scale.setScalar(escala); else g.scale.copy(escala);
-    escena.add(g);
+    if (opc.padre !== null) (opc.padre || escena).add(g);
     return g;
   }
 
+  // Instancias repartidas en tramos de 24 m para que la cámara y la sombra descarten lo que no ven.
+  const tmpV = new THREE.Vector3();
+  function porTramos(matrices) {
+    const tramos = new Map();
+    for (const m of matrices) {
+      tmpV.setFromMatrixPosition(m);
+      const k = Math.floor(tmpV.x / 24);
+      if (!tramos.has(k)) tramos.set(k, []);
+      tramos.get(k).push(m);
+    }
+    return [...tramos.values()];
+  }
   function instanciar(nombre, matrices, opc = {}) {
     const g = new THREE.Group();
-    if (!matrices.length) return g;
-    for (const p of piezas(nombre)) {
-      const im = new THREE.InstancedMesh(p.geometria, mat(p.material, opc.mats), matrices.length);
-      matrices.forEach((m, i) => im.setMatrixAt(i, m));
-      im.castShadow = opc.sombra !== false; im.receiveShadow = true;
-      im.computeBoundingSphere();
-      g.add(im);
+    for (const grupo of porTramos(matrices)) {
+      for (const p of piezas(nombre)) {
+        const im = new THREE.InstancedMesh(p.geometria, mat(p.material, opc.mats), grupo.length);
+        grupo.forEach((m, i) => im.setMatrixAt(i, m));
+        im.castShadow = opc.sombra !== false; im.receiveShadow = true;
+        im.computeBoundingSphere();
+        g.add(im);
+      }
     }
     escena.add(g);
     return g;
@@ -175,6 +255,10 @@ export function construirMundo(escena, gltf, calidad) {
   const matriz = (x, y, z, giro = 0, e = 1, ex, ez) => new THREE.Matrix4().compose(
     new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), giro),
     new THREE.Vector3(ex ?? e, e, ez ?? e));
+  const sprite = (color, escala, pos) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    s.scale.setScalar(escala); if (pos) s.position.copy(pos); return s;
+  };
 
   // ================================================================ Cielo
   const uCielo = { tiempo: { value: 0 }, dirLuna: { value: DIR_LUNA } };
@@ -191,11 +275,11 @@ export function construirMundo(escena, gltf, calidad) {
         vec3 c = mix(horiz, medio, smoothstep(.0,.22,h)); c = mix(c, cenit, smoothstep(.22,.85,h));
         float m = max(dot(d, dirLuna), 0.);
         c += vec3(.30,.36,.52)*pow(m,90.)*.9 + vec3(.16,.2,.32)*pow(m,10.)*.35 + vec3(.06,.07,.1)*pow(m,3.)*.4;
-        // estrellas
+        float banda = exp(-pow(dot(d, normalize(vec3(.2,.5,-.85))), 2.) * 18.);
+        c += vec3(.05,.05,.08) * banda * (.6 + .4*h1(floor(d*60.))) * smoothstep(.05,.4,h);
         vec3 q = d*140.; vec3 id = floor(q); float r = h1(id); vec3 f = fract(q)-.5;
-        float e = step(.965, r) * smoothstep(.16, .0, length(f)) * smoothstep(.04,.3,h) * (1.-smoothstep(.85,.99,m));
+        float e = step(.965 - banda*.02, r) * smoothstep(.16, .0, length(f)) * smoothstep(.04,.3,h) * (1.-smoothstep(.85,.99,m));
         c += e * (.55+.45*sin(tiempo*1.7+r*90.)) * mix(vec3(1.,.92,.8), vec3(.8,.88,1.), fract(r*13.)) * (1.2+3.*step(.993,r));
-        // montañas lejanas (dos capas)
         float m1 = .045 + .035*onda(az,3.,1.) + .022*onda(az,7.,2.) + .01*onda(az,17.,4.);
         float m2 = .02 + .03*onda(az,5.,3.) + .015*onda(az,11.,.5) + .008*onda(az,29.,1.);
         vec3 monte1 = mix(horiz*.75, horiz*.95, smoothstep(.0,.08,h));
@@ -211,38 +295,32 @@ export function construirMundo(escena, gltf, calidad) {
   escena.background = lineal(0.045, 0.065, 0.11);
 
   const luna = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaLuna(), color: lineal(2.6, 2.6, 2.5), fog: false, depthWrite: false }));
-  luna.scale.setScalar(26); luna.position.copy(DIR_LUNA).multiplyScalar(330); luna.renderOrder = -9;
-  escena.add(luna);
+  luna.scale.setScalar(26); luna.renderOrder = -9;
   const haloLuna = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(0.35, 0.42, 0.62), fog: false, depthWrite: false, blending: THREE.AdditiveBlending, transparent: true }));
-  haloLuna.scale.setScalar(150); haloLuna.position.copy(luna.position); haloLuna.renderOrder = -8;
-  escena.add(haloLuna);
+  haloLuna.scale.setScalar(150); haloLuna.renderOrder = -8;
+  escena.add(luna, haloLuna);
 
   // ================================================================ Luces
-  const hemi = new THREE.HemisphereLight(lineal(0.32, 0.42, 0.7), lineal(0.05, 0.07, 0.05), 1.1);
-  escena.add(hemi);
+  escena.add(new THREE.HemisphereLight(lineal(0.32, 0.42, 0.7), lineal(0.05, 0.07, 0.05), 1.1));
   const luzLuna = new THREE.DirectionalLight(lineal(0.62, 0.72, 1.0), 2.4);
   luzLuna.castShadow = true;
   luzLuna.shadow.mapSize.set(alta ? 2048 : 1024, alta ? 2048 : 1024);
   const sc = luzLuna.shadow.camera; sc.left = -24; sc.right = 24; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 160;
   luzLuna.shadow.bias = -0.0004; luzLuna.shadow.normalBias = 0.04;
   escena.add(luzLuna, luzLuna.target);
-
-  // Grupo de luces puntuales que se reparten entre las fuentes más cercanas (faroles, atriles, puertas...).
   const POOL = alta ? 10 : 6;
   const luces = [];
-  for (let i = 0; i < POOL; i++) {
-    const l = new THREE.PointLight(0xffb870, 0, 11, 2);
-    escena.add(l); luces.push(l);
-  }
+  for (let i = 0; i < POOL; i++) { const l = new THREE.PointLight(0xffb870, 0, 11, 2); escena.add(l); luces.push(l); }
 
   // ================================================================ Terreno
   {
-    const ancho = 130, largo = 120, sx = alta ? 260 : 170, sz = alta ? 240 : 150;
+    const ancho = 150, largo = 120, sx = alta ? 300 : 190, sz = alta ? 240 : 150;
     const g = new THREE.PlaneGeometry(ancho, largo, sx, sz);
     g.rotateX(-Math.PI / 2);
-    g.translate(29, 0, 0);
+    g.translate(58, 0, 0);
     const pos = g.attributes.position, colores = new Float32Array(pos.count * 3), r = azar(3);
-    const cPasto = new THREE.Color(0x23402b), cPasto2 = new THREE.Color(0x2f4f2c), cTierra = new THREE.Color(0x5a4a3a), cLodo = new THREE.Color(0x1b2723), cColina = new THREE.Color(0x1f3a35);
+    const cPasto = new THREE.Color(0x23402b), cPasto2 = new THREE.Color(0x2f4f2c), cTierra = new THREE.Color(0x5a4a3a), cGrava = new THREE.Color(0x6a6052),
+      cLodo = new THREE.Color(0x1b2723), cColina = new THREE.Color(0x1f3a35), cRoca = new THREE.Color(0x3b3a3c);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i), y = alturaTerreno(x, z);
@@ -250,9 +328,13 @@ export function construirMundo(escena, gltf, calidad) {
       const n = 0.5 + 0.5 * Math.sin(x * 0.7 + Math.sin(z * 0.9) * 2) * Math.cos(z * 0.5 + x * 0.13);
       c.copy(cPasto).lerp(cPasto2, n * 0.8 + r() * 0.2);
       c.lerp(cColina, Math.min(1, Math.max(0, (Math.abs(z) - 12) / 20)));
-      const ds = distSendero(x, z), anchoS = 1.15 + 0.18 * Math.sin(x * 1.3 + z);
-      c.lerp(cTierra, 1 - suave(Math.min(1, Math.max(0, (ds - anchoS) / 0.7))));
-      if (y < -0.12) c.lerp(cLodo, Math.min(1, (-0.12 - y) / 0.4));
+      if (enLaberinto(x, z)) c.lerp(cGrava, 0.55 + r() * 0.15);
+      else {
+        const ds = distSendero(x, z), anchoS = 1.15 + 0.18 * Math.sin(x * 1.3 + z);
+        c.lerp(cTierra, 1 - suave(Math.min(1, Math.max(0, (ds - anchoS) / 0.7))));
+      }
+      if (y < -0.12 && y > -1.2) c.lerp(cLodo, Math.min(1, (-0.12 - y) / 0.4));
+      if (y <= -1.2) c.copy(cRoca).lerp(cLodo, r() * 0.3);
       colores.set([c.r, c.g, c.b], i * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(colores, 3));
@@ -262,7 +344,7 @@ export function construirMundo(escena, gltf, calidad) {
     escena.add(suelo);
   }
 
-  // ================================================================ Agua (reflejo real con ondas)
+  // ================================================================ Agua del estanque
   const uAgua = { tiempo: { value: 0 } };
   const agua = new Reflector(new THREE.PlaneGeometry(18, 26), {
     clipBias: 0.003,
@@ -287,9 +369,8 @@ export function construirMundo(escena, gltf, calidad) {
                         cos(p.y*2.2+tiempo*.9)+sin(p.x*3.1-p.y*1.4+tiempo*1.4)*.6+cos((p.x-p.y)*5.3-tiempo*1.7)*.3);
           vec4 uv = vUv; uv.xy += d * .018 * uv.w;
           vec3 refl = texture2DProj(tDiffuse, uv).rgb;
-          vec3 profundo = vec3(.004,.016,.03);
-          vec3 c = profundo + refl * color * .85;
-                    gl_FragColor = vec4(c, 1.);
+          vec3 c = vec3(.004,.016,.03) + refl * color * .85;
+          gl_FragColor = vec4(c, 1.);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -306,36 +387,25 @@ export function construirMundo(escena, gltf, calidad) {
       const largo = Math.hypot(bx - ax, bz - az), n = Math.floor(largo / 0.95);
       for (let i = 0; i < n; i++) {
         const t = (i + 0.5) / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-        if (x < -2.5) continue;
+        if (x < -2.5 || Math.abs(x - DISENO.barranco.centro) < 3.6) continue;
+        if (Math.hypot(x - DISENO.plaza.x, z - DISENO.plaza.z) < 4.4) continue;
         const ang = Math.atan2(bz - az, bx - ax), lado = (i % 2 ? 1 : -1) * 0.38;
-        const px = x - Math.sin(ang) * lado * -1, pz = z + Math.cos(ang) * lado;
+        const px = x + Math.sin(ang) * lado, pz = z + Math.cos(ang) * lado;
         m.push(matriz(px, alturaTerreno(px, pz) - 0.07, pz, -ang + r() * 0.5, 0.85 + r() * 0.25));
       }
     }
     instanciar('SM_Losa', m, { sombra: false });
   }
 
-  // ================================================================ Entrada
-  colocar('SM_ArcoEntrada', DISENO.arco, 0, 0);
-  for (const s of [-1, 1]) colisiones.push({ tipo: 'c', x: DISENO.arco, z: s * 2.35, r: 0.5, tope: 9 });
-  // setos bajos a los lados del arco
-  for (const s of [-1, 1]) {
-    for (const [zc, l] of [[4.6, 3.6], [8.2, 3.6]]) {
-      colocar('SM_Seto', DISENO.arco, alturaTerreno(DISENO.arco, s * zc) - 0.05, s * zc, Math.PI / 2, new THREE.Vector3(l / 4.1, 0.5, 0.8));
-      colisiones.push({ tipo: 'b', x: DISENO.arco, z: s * zc, hx: 0.45, hz: l / 2, tope: 9 });
-    }
-  }
-
-  // ================================================================ Faroles
+  // ================================================================ Faroles y guirnaldas
   const faroles = [];
   for (const x of DISENO.faroles) for (const s of [-1, 1]) {
-    const z = s * (2.45 + (x > 21 && x < 38 ? 0.4 : 0)), y = alturaTerreno(x, z);
+    const z = s * (2.45 + (x > 21 && x < 38 ? 0.4 : 0) + (x > 70 && x < 84 ? 0.6 : 0)), y = alturaTerreno(x, z);
     faroles.push(matriz(x, y, z, s * 0.4));
     colisiones.push({ tipo: 'c', x, z, r: 0.22, tope: 9 });
     candidatasLuz.push({ pos: new THREE.Vector3(x, y + 1.66, z), color: new THREE.Color(0xffb36a), fuerza: 5.5 });
   }
   instanciar('SM_Farol', faroles);
-  // halos de los faroles
   {
     const matHalo = new THREE.SpriteMaterial({ map: halo, color: lineal(0.55, 0.32, 0.14), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const p = new THREE.Vector3();
@@ -344,22 +414,46 @@ export function construirMundo(escena, gltf, calidad) {
       const h = new THREE.Sprite(matHalo); h.position.set(p.x, p.y + 1.66, p.z); h.scale.setScalar(1.1);
       escena.add(h);
     }
+    const bombillas = [];
+    for (let k = 0; k < DISENO.faroles.length - 1; k++) {
+      const a = DISENO.faroles[k], b = DISENO.faroles[k + 1];
+      if (a < 92 || b > 109) continue;
+      for (const s of [-1, 1]) {
+        const z = s * 2.45, ya = alturaTerreno(a, z) + 2.0, yb = alturaTerreno(b, z) + 2.0;
+        for (let i = 1; i < 12; i++) {
+          const t = i / 12;
+          bombillas.push(new THREE.Vector3(a + (b - a) * t, ya + (yb - ya) * t - Math.sin(t * Math.PI) * 0.55, z));
+        }
+      }
+    }
+    const im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: lineal(2.6, 1.7, 0.7) }), bombillas.length);
+    bombillas.forEach((q, i) => im.setMatrixAt(i, matriz(q.x, q.y, q.z)));
+    im.computeBoundingSphere();
+    escena.add(im);
   }
 
-  // ================================================================ Atriles con pistas
+  // ================================================================ Nivel 1: entrada y puertas
+  colocar('SM_ArcoEntrada', DISENO.arco, 0, 0);
+  for (const s of [-1, 1]) colisiones.push({ tipo: 'c', x: DISENO.arco, z: s * 2.35, r: 0.5, tope: 9 });
+  for (const s of [-1, 1]) {
+    for (const [zc, l] of [[4.6, 3.6], [8.2, 3.6]]) {
+      colocar('SM_Seto', DISENO.arco, alturaTerreno(DISENO.arco, s * zc) - 0.05, s * zc, Math.PI / 2, new THREE.Vector3(l / 4.1, 0.5, 0.8));
+      colisiones.push({ tipo: 'b', x: DISENO.arco, z: s * zc, hx: 0.45, hz: l / 2, tope: 9 });
+    }
+  }
+
   const atriles = DISENO.atriles.map((a, i) => {
     const y = alturaTerreno(a.x, a.z);
-    const g = colocar('SM_Atril', a.x, y, a.z, 0);
+    colocar('SM_Atril', a.x, y, a.z, 0);
     colisiones.push({ tipo: 'c', x: a.x, z: a.z, r: 0.35, tope: 9 });
     const orbe = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), new THREE.MeshBasicMaterial({ color: lineal(4, 2.6, 0.9) }));
-    const brilloOrbe = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(1.6, 1.0, 0.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    brilloOrbe.scale.setScalar(0.9);
+    const brilloOrbe = sprite(lineal(1.6, 1.0, 0.4), 0.9);
     orbe.add(brilloOrbe);
     orbe.position.set(a.x, y + 1.95, a.z);
     escena.add(orbe);
     const luz = { pos: orbe.position, color: new THREE.Color(0xffc070), fuerza: 1.4 };
     candidatasLuz.push(luz);
-    const estado = { indice: i, x: a.x, z: a.z, grupo: g, orbe, leida: false };
+    const estado = { indice: i, x: a.x, z: a.z, orbe, leida: false };
     estado.marcarLeida = (si) => {
       estado.leida = si;
       orbe.material.color.copy(si ? lineal(0.8, 2.6, 1.6) : lineal(4, 2.6, 0.9));
@@ -370,8 +464,7 @@ export function construirMundo(escena, gltf, calidad) {
     return estado;
   });
 
-  // ================================================================ Las tres puertas
-  const puertas = DISENO.puertas.lugares.map((p) => {
+  DISENO.puertas.lugares.forEach((p) => {
     const col = new THREE.Color(p.color);
     const mats = {
       M_PuertaColor: new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, emissive: col, emissiveIntensity: p.correcta ? 0.22 : 0.06 }),
@@ -382,14 +475,11 @@ export function construirMundo(escena, gltf, calidad) {
     for (const s of [-1, 1]) colisiones.push({ tipo: 'c', x, z: p.z + s * 1.45, r: 0.33, tope: 9 });
     candidatasLuz.push({ pos: new THREE.Vector3(x - 0.6, 3.6, p.z), color: col.clone(), fuerza: p.correcta ? 9 : 4 });
     if (p.correcta) {
-      const sol = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(2.2, 1.4, 0.45), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-      sol.position.set(x - 0.3, 4.12, p.z); sol.scale.setScalar(2.6);
+      const sol = sprite(lineal(2.2, 1.4, 0.45), 2.6, new THREE.Vector3(x - 0.3, 4.12, p.z));
       escena.add(sol);
       actualizables.push(({ t }) => sol.scale.setScalar(2.4 + Math.sin(t * 2.2) * 0.35));
     }
-    return { ...p, x };
   });
-  // setos entre puertas
   {
     const x = DISENO.puertas.x;
     for (const [z0, z1] of [[-12, -7.2], [-3.8, -1.7], [1.7, 3.8], [7.2, 12]]) {
@@ -399,15 +489,36 @@ export function construirMundo(escena, gltf, calidad) {
     }
   }
 
-  // ================================================================ Estanque: piedras, nenúfares y juncos
-  const piedras = DISENO.piedras.map(([x, z, mov], i) => {
+  // ================================================================ Nivel 2: estanque
+  const geoNenufarGrande = new THREE.CylinderGeometry(0.95, 0.95, 0.07, 28, 1, false, 0.25, Math.PI * 2 - 0.5).translate(0, -0.035, 0);
+  const matNenufar = new THREE.MeshStandardMaterial({ color: 0x3f8a4c, roughness: 0.55, side: THREE.DoubleSide });
+  const piedras = DISENO.piedras.map(([x, z, mov, tipo], i) => {
+    if (tipo === 'n') {
+      const g = new THREE.Group();
+      const hoja = new THREE.Mesh(geoNenufarGrande, matNenufar); hoja.receiveShadow = true; g.add(hoja);
+      colocar('SM_Nenufar', 0.35, 0.02, -0.3, 0, 2.2, { padre: g });
+      g.position.set(x, NIVEL_AGUA + 0.02, z); g.rotation.y = i;
+      escena.add(g);
+      const sup = { tipo: 'c', x, z, r: 0.9, tope: NIVEL_AGUA + 0.04, nenufar: true, carga: 0, ultimo: -9 };
+      sup.pisada = (t) => { sup.ultimo = t; };
+      superficies.push(sup);
+      actualizables.push(({ t, dt }) => {
+        const pisado = t - sup.ultimo < 0.1;
+        sup.carga = pisado ? sup.carga + dt : Math.max(0, sup.carga - dt * 0.6);
+        const hundido = Math.max(0, sup.carga - 0.75) * 0.55;
+        g.position.y = NIVEL_AGUA + 0.02 - hundido + Math.sin(t * 1.3 + i) * 0.01;
+        g.rotation.z = Math.sin(t * 9) * Math.min(0.06, hundido * 0.4);
+        sup.tope = NIVEL_AGUA + 0.04 - hundido;
+      });
+      return { grupo: g, sup };
+    }
     const g = colocar('SM_PiedraEstanque', x, NIVEL_AGUA - 0.02, z, i * 1.3, 0.95);
     const sup = { tipo: 'c', x, z, r: 0.62, tope: NIVEL_AGUA - 0.02 + 0.37, piedra: true };
     superficies.push(sup);
     if (mov) {
-      const z0 = z, fase = i;
+      const z0 = z;
       actualizables.push(({ t }) => {
-        const nz = z0 + Math.sin(t * (Math.PI * 2 / 4.2) + fase) * mov;
+        const nz = z0 + Math.sin(t * (Math.PI * 2 / 4.2) + i) * mov;
         sup.dz = nz - sup.z; sup.z = nz; g.position.z = nz;
       });
     }
@@ -416,7 +527,7 @@ export function construirMundo(escena, gltf, calidad) {
   {
     const r = azar(9), nen = [], jun = [], roc = [];
     for (let i = 0; i < (alta ? 44 : 26); i++) {
-      const x = 23 + r() * 13, z = (r() < 0.5 ? -1 : 1) * (2 + r() * 8);
+      const x = 23 + r() * 13, z = (r() < 0.5 ? -1 : 1) * (2.2 + r() * 8);
       if (alturaTerreno(x, z) > NIVEL_AGUA - 0.1) continue;
       nen.push(matriz(x, NIVEL_AGUA + 0.005, z, r() * 6, 0.9 + r() * 0.7));
     }
@@ -435,13 +546,234 @@ export function construirMundo(escena, gltf, calidad) {
     instanciar('SM_Roca', roc);
   }
 
-  // ================================================================ Árboles, arbustos, flores y rocas
+  // ================================================================ Cortinas de luz (reja del laberinto y barrera del bosque)
+  function crearCortina(x, zc, ancho, alto, color, fuerza = 0.42) {
+    const u = { tiempo: uCielo.tiempo, abierto: { value: 0 }, color: { value: color } };
+    const malla = new THREE.Mesh(new THREE.PlaneGeometry(ancho, alto), new THREE.ShaderMaterial({
+      uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+      fragmentShader: `uniform float tiempo; uniform float abierto; uniform vec3 color; varying vec2 vUv;
+        void main(){
+          float x = vUv.x*${(ancho * 3.2).toFixed(1)};
+          float rayas = pow(abs(sin(x + sin(x*.37+tiempo)*1.5)), 18.) + pow(abs(sin(x*.53 - tiempo*.7)), 30.)*.7;
+          float sube = fract(vUv.y*1.5 - tiempo*.25 + sin(x*.11)*.3);
+          float borde = smoothstep(0., .12, vUv.y) * (1.-smoothstep(.55, 1., vUv.y)) * smoothstep(0.,.05,vUv.x)*smoothstep(1.,.95,vUv.x);
+          float a = (rayas*.5 + smoothstep(.97, 1., sube)*.55 + .08) * borde * (1.-abierto) * ${fuerza.toFixed(2)};
+          gl_FragColor = vec4(color*a, 1.);
+        }`,
+    }));
+    malla.rotation.y = Math.PI / 2;
+    malla.position.set(x, alturaTerreno(x, zc) + alto / 2 - 0.1, zc);
+    escena.add(malla);
+    const col = { tipo: 'b', x, z: zc, hx: 0.3, hz: ancho / 2, tope: 99 };
+    colisiones.push(col);
+    const c = {
+      abierta: false, progreso: 0,
+      abrir(inmediato = false) { if (this.abierta) return; this.abierta = true; col.tope = -99; if (inmediato) this.progreso = 1; },
+    };
+    candidatasLuz.push({ pos: new THREE.Vector3(x - 0.5, 1.5, zc), color: new THREE.Color().setRGB(color.r, color.g, color.b).multiplyScalar(0.5), fuerza: 3, cortina: c });
+    actualizables.push(({ dt }) => {
+      if (c.abierta && c.progreso < 1) c.progreso = Math.min(1, c.progreso + dt / 1.6);
+      u.abierto.value = c.progreso;
+      malla.visible = c.progreso < 1;
+      malla.scale.y = 1 - c.progreso * 0.6;
+    });
+    return c;
+  }
+
+  // ================================================================ Nivel 3: laberinto de rosas
+  const rosas = [];
+  let reja;
   {
-    const r = azar(21), a1 = [], a2 = [], arb = [], flo = [], roc = [];
-    const libre = (x, z, minS) => distSendero(x, z) > minS && !(x > 20.5 && x < 38.6 && Math.abs(z) < 12.5) && Math.hypot(x - DISENO.mirador.x, z) > 6;
-    const total = alta ? 330 : 190;
-    for (let i = 0; i < total * 4 && a1.length + a2.length < total; i++) {
-      const x = -14 + r() * 92, z = (r() < 0.5 ? -1 : 1) * (4.6 + Math.pow(r(), 0.8) * 42);
+    const { columnas: C, filas: R, celda: T, x0: X0, z0: Z0 } = LAB;
+    const { pasa, id } = laberinto;
+    const muros = [];
+    for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+      if (i < C - 1 && !pasa(id(i, j), id(i + 1, j))) muros.push([X0 + (i + 1) * T, Z0 + j * T + T / 2, false, T]);
+      if (j < R - 1 && !pasa(id(i, j), id(i, j + 1))) muros.push([X0 + i * T + T / 2, Z0 + (j + 1) * T, true, T]);
+    }
+    for (let i = 0; i < C; i++) { muros.push([X0 + i * T + T / 2, Z0, true, T]); muros.push([X0 + i * T + T / 2, Z0 + R * T, true, T]); }
+    for (let j = 0; j < R; j++) {
+      if (j !== LAB.filaEntrada) muros.push([X0, Z0 + j * T + T / 2, false, T]);
+      if (j !== LAB.filaSalida) muros.push([X0 + C * T, Z0 + j * T + T / 2, false, T]);
+    }
+    for (const s of [-1, 1]) for (const x of [X0, X0 + C * T]) muros.push([x, s * 9.6, false, 3.2]);
+    const r = azar(55), setos = [], floresSeto = [];
+    for (const [xc, zc, horiz, largo] of muros) {
+      const y = alturaTerreno(xc, zc) - 0.05, l = largo + 0.75;
+      setos.push(matriz(xc, y, zc, horiz ? 0 : Math.PI / 2, 1, l / 4.1, 0.72));
+      colisiones.push({ tipo: 'b', x: xc, z: zc, hx: horiz ? l / 2 : 0.38, hz: horiz ? 0.38 : l / 2, tope: 9 });
+      for (let k = 0; k < 3; k++) {
+        if (r() < 0.45) continue;
+        const t = (r() - 0.5) * largo;
+        const fx = horiz ? xc + t : xc + (r() - 0.5) * 0.5, fz = horiz ? zc + (r() - 0.5) * 0.5 : zc + t;
+        floresSeto.push(matriz(fx, y + 2.05 + r() * 0.15, fz, r() * 6, 0.8 + r() * 0.5));
+      }
+    }
+    instanciar('SM_Seto', setos);
+    instanciar('SM_Flores', floresSeto, { sombra: false });
+    colocar('SM_ArcoEntrada', X0 - 0.2, 0, Z0 + LAB.filaEntrada * T + T / 2, 0, new THREE.Vector3(1, 0.62, 0.42));
+    colocar('SM_ArcoEntrada', X0 + C * T + 0.2, 0, Z0 + LAB.filaSalida * T + T / 2, 0, new THREE.Vector3(1, 0.62, 0.42));
+    const r2 = azar(66);
+    for (let k = 0; k < 9; k++) {
+      const i = 1 + Math.floor(r2() * (C - 2)), j = Math.floor(r2() * R);
+      const x = X0 + i * T + 0.45, z = Z0 + j * T + 0.45, y = alturaTerreno(x, z);
+      colocar('SM_Farol', x, y, z, 0, 0.7);
+      colisiones.push({ tipo: 'c', x, z, r: 0.18, tope: 9 });
+      candidatasLuz.push({ pos: new THREE.Vector3(x, y + 1.16, z), color: new THREE.Color(0xffb36a), fuerza: 3.2 });
+    }
+    const matPetalo = new THREE.MeshStandardMaterial({ color: 0xff7eb3, emissive: 0xff4f96, emissiveIntensity: 1.6, roughness: 0.4 });
+    const matTallo = new THREE.MeshStandardMaterial({ color: 0x3f7a3f, roughness: 0.7 });
+    laberinto.rosas.forEach((c, k) => {
+      const x = X0 + c.i * T + T / 2, z = Z0 + c.j * T + T / 2, y = alturaTerreno(x, z);
+      const g = new THREE.Group();
+      const tallo = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.5, 6), matTallo); tallo.position.y = 0.25; g.add(tallo);
+      const capullo = new THREE.Group(); capullo.position.y = 0.55; g.add(capullo);
+      for (let p = 0; p < 7; p++) {
+        const pet = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), matPetalo);
+        const a = (p / 7) * Math.PI * 2;
+        pet.scale.set(0.55, 1, 1); pet.position.set(Math.cos(a) * 0.045, (p % 2) * 0.02, Math.sin(a) * 0.045); pet.rotation.y = -a;
+        capullo.add(pet);
+      }
+      g.add(sprite(lineal(1.4, 0.35, 0.7), 1.3, new THREE.Vector3(0, 0.55, 0)));
+      g.position.set(x, y + 0.45, z);
+      escena.add(g);
+      const luz = { pos: new THREE.Vector3(x, y + 1.0, z), color: new THREE.Color(0xff6aa8), fuerza: 2.5 };
+      candidatasLuz.push(luz);
+      const rosa = { id: k, x, z, y, grupo: g, tomada: false };
+      rosa.tomar = () => { rosa.tomada = true; g.visible = false; luz.fuerza = 0; };
+      actualizables.push(({ t }) => { if (!rosa.tomada) { g.rotation.y = t * 0.8 + k; g.position.y = y + 0.45 + Math.sin(t * 2 + k) * 0.08; } });
+      rosas.push(rosa);
+    });
+    reja = crearCortina(X0 + C * T + 0.15, Z0 + LAB.filaSalida * T + T / 2, T + 0.2, 3, lineal(1.6, 0.45, 0.85), 0.6);
+  }
+
+  // ================================================================ Nivel 4: plaza de los faroles, fuente y puente
+  const P = DISENO.plaza;
+  const placas = [];
+  {
+    const perfil = [[0, 0], [1.35, 0], [1.4, 0.12], [1.4, 0.45], [1.25, 0.5], [1.2, 0.3], [0.35, 0.3], [0.3, 0.9], [0.55, 1.0], [0.6, 1.08], [0.18, 1.12], [0.14, 1.6], [0.28, 1.68], [0.3, 1.74], [0, 1.78]]
+      .map(([a, b]) => new THREE.Vector2(a, b));
+    const yF = alturaTerreno(P.x, P.z);
+    const fuente = new THREE.Mesh(new THREE.LatheGeometry(perfil, 40), new THREE.MeshStandardMaterial({ color: 0x8f877c, roughness: 0.92, side: THREE.DoubleSide }));
+    fuente.position.set(P.x, yF, P.z); fuente.castShadow = fuente.receiveShadow = true;
+    escena.add(fuente);
+    colisiones.push({ tipo: 'c', x: P.x, z: P.z, r: 1.45, tope: 9 });
+    const espejo = new THREE.Mesh(new THREE.CircleGeometry(1.2, 32), new THREE.MeshStandardMaterial({ color: 0x0b1c2a, roughness: 0.05, metalness: 0.4, emissive: 0x0a2a3a, emissiveIntensity: 0.6 }));
+    espejo.rotation.x = -Math.PI / 2; espejo.position.set(P.x, yF + 0.42, P.z);
+    escena.add(espejo);
+    const n = 160, pos = new Float32Array(n * 3), fase = new Float32Array(n), rr = azar(8);
+    for (let i = 0; i < n; i++) { fase[i] = rr(); pos.set([rr() * Math.PI * 2, 0, 0], i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('fase', new THREE.BufferAttribute(fase, 1));
+    const uF = { tiempo: uCielo.tiempo, mapa: { value: halo }, base: { value: new THREE.Vector3(P.x, yF + 1.76, P.z) } };
+    const chorro = new THREE.Points(g, new THREE.ShaderMaterial({
+      uniforms: uF, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute float fase; uniform float tiempo; uniform vec3 base; varying float vA;
+        void main(){ float t = fract(tiempo*.55 + fase); float a = position.x;
+          vec3 p = base + vec3(cos(a)*t*.95, t*.9 - t*t*2.1, sin(a)*t*.95);
+          vA = 1. - t; vec4 mv = modelViewMatrix*vec4(p,1.); gl_Position = projectionMatrix*mv; gl_PointSize = min(30./-mv.z, 6.); }`,
+      fragmentShader: `uniform sampler2D mapa; varying float vA; void main(){ float a = texture2D(mapa, gl_PointCoord).r; gl_FragColor = vec4(vec3(.55,.75,1.)*a*vA*.9, 1.); }`,
+    }));
+    chorro.frustumCulled = false;
+    escena.add(chorro);
+    for (const d of DISENO.placas) {
+      const col = new THREE.Color(d.color), y = alturaTerreno(d.x, d.z);
+      const matPlaca = new THREE.MeshStandardMaterial({ color: 0x3a3631, emissive: col, emissiveIntensity: 0.25, roughness: 0.6 });
+      const placa = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.78, 0.09, 32), matPlaca);
+      placa.position.set(d.x, y + 0.03, d.z); placa.receiveShadow = true;
+      escena.add(placa);
+      const aro = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.035, 8, 40), new THREE.MeshStandardMaterial({ color: 0xd9b26a, metalness: 1, roughness: 0.3 }));
+      aro.rotation.x = Math.PI / 2; aro.position.set(d.x, y + 0.08, d.z); escena.add(aro);
+      const matVidrio = new THREE.MeshStandardMaterial({ color: 0, emissive: col, emissiveIntensity: 0.25 });
+      const fx = d.x + (d.x - P.x) * 0.55, fz = d.z + (d.z - P.z) * 0.55;
+      colocar('SM_Farol', fx, alturaTerreno(fx, fz), fz, 0, 1.15, { mats: { M_LuzFarol: matVidrio } });
+      colisiones.push({ tipo: 'c', x: fx, z: fz, r: 0.24, tope: 9 });
+      const luz = { pos: new THREE.Vector3(fx, alturaTerreno(fx, fz) + 1.9, fz), color: col.clone(), fuerza: 0.6 };
+      candidatasLuz.push(luz);
+      const brillo = sprite(new THREE.Color(0, 0, 0), 1.6, luz.pos);
+      escena.add(brillo);
+      const p = { ...d, y, encendida: false, destello: 0 };
+      p.encender = (si) => {
+        p.encendida = si;
+        matVidrio.emissiveIntensity = si ? 3.2 : 0.25; matPlaca.emissiveIntensity = si ? 1.4 : 0.25;
+        luz.fuerza = si ? 6 : 0.6;
+        brillo.material.color.copy(col).multiplyScalar(si ? 0.9 : 0);
+      };
+      p.error = () => { p.destello = 0.6; };
+      actualizables.push(({ dt, t }) => {
+        if (p.destello > 0) {
+          p.destello -= dt;
+          matPlaca.emissive.setRGB(1, 0.15, 0.1); matPlaca.emissiveIntensity = 1.5 * (0.5 + 0.5 * Math.sin(t * 40));
+          if (p.destello <= 0) { matPlaca.emissive.copy(col); matPlaca.emissiveIntensity = p.encendida ? 1.4 : 0.25; }
+        }
+      });
+      placas.push(p);
+    }
+    for (const [bx, bz, giro] of [[75, -4.2, Math.PI / 4], [81, -4.2, Math.PI * 0.75], [75, 4.2, -Math.PI / 4], [81, 4.2, -Math.PI * 0.75]]) {
+      colocar('SM_Banca', bx, alturaTerreno(bx, bz), bz, giro);
+      colisiones.push({ tipo: 'c', x: bx, z: bz, r: 0.6, tope: 1.2 });
+    }
+  }
+
+  const B = DISENO.barranco;
+  {
+    const uN = { tiempo: uCielo.tiempo };
+    const niebla = new THREE.Mesh(new THREE.PlaneGeometry(8, 40, 1, 1), new THREE.ShaderMaterial({
+      uniforms: uN, transparent: true, depthWrite: false,
+      vertexShader: `varying vec2 vUv; varying vec3 vM; void main(){ vUv = uv; vM = (modelMatrix*vec4(position,1.)).xyz; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+      fragmentShader: `uniform float tiempo; varying vec2 vUv; varying vec3 vM;
+        void main(){ float n = sin(vM.z*.7+tiempo*.3)*.5+.5; n *= sin(vM.x*1.3-tiempo*.2+vM.z*.2)*.5+.5;
+          float borde = smoothstep(0.,.25,vUv.x)*smoothstep(1.,.75,vUv.x);
+          gl_FragColor = vec4(vec3(.25,.33,.5), (.35+.35*n)*borde); }`,
+    }));
+    niebla.rotation.x = -Math.PI / 2; niebla.position.set(B.centro, -3.2, 0);
+    escena.add(niebla);
+    const r = azar(99), roc = [];
+    for (let i = 0; i < 40; i++) {
+      const s = r() < 0.5 ? -1 : 1, x = B.centro + s * (2.4 + r() * 0.9), z = -14 + r() * 28;
+      roc.push(matriz(x, alturaTerreno(x, z) + 0.4, z, r() * 6, 0.8 + r() * 1.6));
+    }
+    instanciar('SM_Roca', roc);
+    for (const x of [B.x0 - 0.3, B.x1 + 0.3]) for (const s of [-1, 1]) {
+      colocar('SM_Farol', x, alturaTerreno(x, s * 1.4), s * 1.4, 0, 0.8);
+      colisiones.push({ tipo: 'c', x, z: s * 1.4, r: 0.18, tope: 9 });
+    }
+  }
+  const puente = { activo: false, progreso: 0, plataformas: [] };
+  {
+    const matLosa = new THREE.MeshStandardMaterial({ color: 0x9c938a, roughness: 0.85, emissive: 0x2a3a5a, emissiveIntensity: 0.25 });
+    DISENO.puente.forEach(([x, z, movZ, movY], i) => {
+      const g = new THREE.Group();
+      for (const p of piezas('SM_Losa')) { const m = new THREE.Mesh(p.geometria, matLosa); m.castShadow = m.receiveShadow = true; g.add(m); }
+      g.scale.set(2.1, 3, 2.1);
+      g.add(sprite(lineal(0.4, 0.6, 1.2), 0.8, new THREE.Vector3(0, -0.05, 0)));
+      escena.add(g);
+      const sup = { tipo: 'c', x, z, r: 0.98, tope: -99 };
+      superficies.push(sup);
+      actualizables.push(({ t }) => {
+        const e = 1 - Math.pow(1 - Math.min(1, Math.max(0, puente.progreso * 1.6 - i * 0.3)), 3);
+        const nz = z + Math.sin(t * 1.25 + i) * movZ;
+        const ny = THREE.MathUtils.lerp(-7, -0.2, e) + Math.sin(t * 1.1 + i) * movY;
+        sup.dz = nz - sup.z; sup.z = nz;
+        sup.tope = e > 0.98 ? ny + 0.36 : -99;
+        g.position.set(x, ny, nz);
+        g.visible = e > 0.01;
+      });
+      puente.plataformas.push({ grupo: g, sup });
+    });
+    puente.activar = (inmediato = false) => { puente.activo = true; if (inmediato) puente.progreso = 1; };
+    actualizables.push(({ dt }) => { if (puente.activo && puente.progreso < 1) puente.progreso = Math.min(1, puente.progreso + dt / 2.6); });
+  }
+
+  // ================================================================ Árboles, arbustos, flores, rocas y hongos
+  {
+    const r = azar(21), a1 = [], a2 = [], arb = [], flo = [], roc = [], hongos = [];
+    const libre = (x, z, minS) => distSendero(x, z) > minS && !(x > 20.5 && x < 38.6 && Math.abs(z) < 12.5)
+      && Math.hypot(x - DISENO.mirador.x, z) > 6 && !(x > LAB.x0 - 1.5 && x < LAB.x0 + LAB.columnas * LAB.celda + 1.5 && Math.abs(z) < 10.5)
+      && Math.abs(x - B.centro) > 4.2 && Math.hypot(x - P.x, z - P.z) > 7;
+    const total = alta ? 520 : 300;
+    for (let i = 0; i < total * 5 && a1.length + a2.length < total; i++) {
+      const x = -14 + r() * 150, z = (r() < 0.5 ? -1 : 1) * (4.6 + Math.pow(r(), 0.8) * 42);
       if (!libre(x, z, 3.2)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 2 && Math.abs(z) < 13) continue;
       if (Math.abs(x - DISENO.arco) < 1.5 && Math.abs(z) < 10.5) continue;
@@ -450,28 +782,40 @@ export function construirMundo(escena, gltf, calidad) {
       if (Math.abs(z) < 11) colisiones.push({ tipo: 'c', x, z, r: 0.38 * e, tope: 99 });
     }
     instanciar('SM_Arbol1', a1); instanciar('SM_Arbol2', a2);
-    for (let i = 0; i < 900 && arb.length < (alta ? 110 : 70); i++) {
-      const x = -3 + r() * 64, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
+    for (let i = 0; i < 2000 && arb.length < (alta ? 190 : 120); i++) {
+      const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
       if (!libre(x, z, 1.9)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 1.3 && Math.abs(z) < 12) continue;
       arb.push(matriz(x, alturaTerreno(x, z) - 0.05, z, r() * 6, 0.8 + r() * 0.6));
     }
     instanciar('SM_Arbusto', arb);
-    for (let i = 0; i < 2000 && flo.length < (alta ? 260 : 150); i++) {
-      const x = -3 + r() * 64, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
+    for (let i = 0; i < 4000 && flo.length < (alta ? 460 : 260); i++) {
+      const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
       if (!libre(x, z, 1.4)) continue;
       flo.push(matriz(x, alturaTerreno(x, z) - 0.02, z, r() * 6, 0.8 + r() * 0.7));
     }
     instanciar('SM_Flores', flo, { sombra: false });
-    for (let i = 0; i < 400 && roc.length < 40; i++) {
-      const x = -6 + r() * 70, z = (r() < 0.5 ? -1 : 1) * (3.5 + r() * 18);
+    for (let i = 0; i < 800 && roc.length < 70; i++) {
+      const x = -6 + r() * 130, z = (r() < 0.5 ? -1 : 1) * (3.5 + r() * 18);
       if (!libre(x, z, 2.2)) continue;
       roc.push(matriz(x, alturaTerreno(x, z) - 0.15, z, r() * 6, 0.4 + r() * 1.2));
     }
     instanciar('SM_Roca', roc);
+    for (let i = 0; i < 600 && hongos.length < 140; i++) {
+      const x = 92 + r() * 18, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 9);
+      if (distSendero(x, z) < 1.3) continue;
+      hongos.push(matriz(x, alturaTerreno(x, z), z, r() * 6, 0.6 + r() * 0.9));
+    }
+    const sombrero = new THREE.SphereGeometry(0.07, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.09, 0);
+    const pie = new THREE.CylinderGeometry(0.018, 0.024, 0.1, 6).translate(0, 0.05, 0);
+    const imS = new THREE.InstancedMesh(sombrero, new THREE.MeshStandardMaterial({ color: 0x6fd6ff, emissive: 0x2fa8ff, emissiveIntensity: 1.6, roughness: 0.4 }), hongos.length);
+    const imP = new THREE.InstancedMesh(pie, new THREE.MeshStandardMaterial({ color: 0xe8e2d0, emissive: 0x405060, emissiveIntensity: 0.4 }), hongos.length);
+    hongos.forEach((m, i) => { imS.setMatrixAt(i, m); imP.setMatrixAt(i, m); });
+    imS.computeBoundingSphere(); imP.computeBoundingSphere();
+    escena.add(imS, imP);
   }
 
-  // ================================================================ Pasto con viento
+  // ================================================================ Pasto con viento (por tramos)
   const uPasto = { tiempo: { value: 0 } };
   {
     const hoja = new THREE.PlaneGeometry(0.055, 1, 1, 4);
@@ -483,9 +827,7 @@ export function construirMundo(escena, gltf, calidad) {
       p.setZ(i, y * y * 0.12);
       nor.setXYZ(i, 0, 1, 0);
     }
-    const otra = hoja.clone().rotateY(Math.PI / 2);
-    const mata = mergeGeometries([hoja, otra]);
-    const n = alta ? 52000 : 16000, r = azar(33);
+    const mata = mergeGeometries([hoja, hoja.clone().rotateY(Math.PI / 2)]);
     const matPasto = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide });
     matPasto.onBeforeCompile = (s) => {
       s.uniforms.tiempo = uPasto.tiempo;
@@ -499,62 +841,61 @@ export function construirMundo(escena, gltf, calidad) {
       s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAlto;')
         .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(.28, 1.15, vAlto);');
     };
-    const pasto = new THREE.InstancedMesh(mata, matPasto, n);
-    const c1 = new THREE.Color(0x3d6b3a), c2 = new THREE.Color(0x5a7f45), c3 = new THREE.Color(0x2f5a45), col = new THREE.Color();
+    const n = alta ? 90000 : 28000, r = azar(33);
+    const c1 = new THREE.Color(0x3d6b3a), c2 = new THREE.Color(0x5a7f45), c3 = new THREE.Color(0x2f5a45);
+    const tramos = new Map();
     let k = 0;
     for (let i = 0; i < n * 3 && k < n; i++) {
       const cerca = r() < 0.75;
-      const x = -4 + r() * 66, z = (r() < 0.5 ? -1 : 1) * (cerca ? 1.1 + r() * 9 : 9 + r() * 12);
+      const x = -4 + r() * 126, z = (r() < 0.5 ? -1 : 1) * (cerca ? 1.1 + r() * 9 : 9 + r() * 12);
       const ds = distSendero(x, z);
       if (ds < 1.05 + r() * 0.5) continue;
       const y = alturaTerreno(x, z);
       if (y < NIVEL_AGUA + 0.08) continue;
       if (Math.hypot(x - DISENO.mirador.x, z) < 4.4) continue;
       const alto = (0.22 + r() * 0.3) * (ds < 2.2 ? 0.7 : 1) * (Math.abs(z) > 9 ? 1.35 : 1);
-      pasto.setMatrixAt(k, matriz(x, y - 0.02, z, r() * 6.3, 1, 1, 1).scale(new THREE.Vector3(1, alto, 1)));
-      col.copy(c1).lerp(r() < 0.5 ? c2 : c3, r());
-      pasto.setColorAt(k, col);
+      const clave = Math.floor(x / 20);
+      if (!tramos.has(clave)) tramos.set(clave, []);
+      tramos.get(clave).push([matriz(x, y - 0.02, z, r() * 6.3, 1, 1, 1).scale(new THREE.Vector3(1, alto, 1)), c1.clone().lerp(r() < 0.5 ? c2 : c3, r())]);
       k++;
     }
-    pasto.count = k;
-    pasto.receiveShadow = true;
-    pasto.computeBoundingSphere();
-    escena.add(pasto);
+    for (const lista of tramos.values()) {
+      const im = new THREE.InstancedMesh(mata, matPasto, lista.length);
+      lista.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
+      im.receiveShadow = true;
+      im.computeBoundingSphere();
+      escena.add(im);
+    }
   }
 
-  // ================================================================ Luciérnagas: las 7 que se atrapan
+  // ================================================================ Nivel 5: luciérnagas
   const geoLuc = new THREE.SphereGeometry(0.055, 12, 8);
   const luciernagas = DISENO.luciernagas.map(([x, z, alto], id) => {
     const y = alturaTerreno(x, z) + alto;
     const m = new THREE.Mesh(geoLuc, new THREE.MeshBasicMaterial({ color: lineal(3, 2.6, 0.75) }));
-    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(0.9, 0.78, 0.22), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    h.scale.setScalar(1.1); m.add(h);
+    m.add(sprite(lineal(0.9, 0.78, 0.22), 1.1));
     m.position.set(x, y, z);
     escena.add(m);
-    const luz = { pos: m.position, color: new THREE.Color(0xfff08a), fuerza: 1.6 };
-    candidatasLuz.push(luz);
-    return { id, malla: m, origen: new THREE.Vector3(x, y, z), atrapada: false, orden: 0, luz };
+    candidatasLuz.push({ pos: m.position, color: new THREE.Color(0xfff08a), fuerza: 1.6 });
+    return { id, malla: m, origen: new THREE.Vector3(x, y, z), atrapada: false, orden: 0 };
   });
+  const objetivoLuc = new THREE.Vector3();
   actualizables.push(({ t, jugador }) => {
     for (const l of luciernagas) {
       if (!l.atrapada) {
         l.malla.position.set(l.origen.x + Math.sin(t * 0.9 + l.id) * 0.35, l.origen.y + Math.sin(t * 1.6 + l.id * 2) * 0.18, l.origen.z + Math.cos(t * 0.7 + l.id) * 0.35);
       } else if (jugador) {
         const a = t * 1.1 + l.orden * (Math.PI * 2 / 7);
-        const objetivo = new THREE.Vector3(jugador.x + Math.cos(a) * 0.85, jugador.y + 1.35 + Math.sin(t * 2 + l.orden) * 0.18, jugador.z + Math.sin(a) * 0.85);
-        l.malla.position.lerp(objetivo, 0.08);
+        l.malla.position.lerp(objetivoLuc.set(jugador.x + Math.cos(a) * 0.85, jugador.y + 1.35 + Math.sin(t * 2 + l.orden) * 0.18, jugador.z + Math.sin(a) * 0.85), 0.08);
       }
-      const s = 1 + Math.sin(t * 6 + l.id * 3) * 0.25;
-      l.malla.children[0].scale.setScalar((l.atrapada ? 0.55 : 1.1) * s);
+      l.malla.children[0].scale.setScalar((l.atrapada ? 0.55 : 1.1) * (1 + Math.sin(t * 6 + l.id * 3) * 0.25));
     }
   });
-
-  // Luciérnagas decorativas por todo el jardín
   {
-    const n = alta ? 360 : 160, r = azar(77), pos = new Float32Array(n * 3), fase = new Float32Array(n);
+    const n = alta ? 520 : 220, r = azar(77), pos = new Float32Array(n * 3), fase = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      const x = -4 + r() * 66, z = (r() - 0.5) * 30;
-      pos.set([x, alturaTerreno(x, z) + 0.3 + r() * 2.6, z], i * 3); fase[i] = r() * 100;
+      const x = -4 + r() * 124, z = (r() - 0.5) * 30;
+      pos.set([x, Math.max(alturaTerreno(x, z), -1.5) + 0.3 + r() * 2.6, z], i * 3); fase[i] = r() * 100;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -574,46 +915,9 @@ export function construirMundo(escena, gltf, calidad) {
     escena.add(puntos);
     actualizables.push(() => { uLuc.escalaPx.value = innerHeight / 2; });
   }
+  const barrera = crearCortina(DISENO.barrera, 0, 20, 4.2, lineal(1.4, 0.95, 0.4));
 
-  // ================================================================ Barrera de luz
-  const uBarrera = { tiempo: uCielo.tiempo, abierto: { value: 0 } };
-  const barreraMalla = new THREE.Mesh(new THREE.PlaneGeometry(19, 4.2, 1, 1), new THREE.ShaderMaterial({
-    uniforms: uBarrera, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: `uniform float tiempo; uniform float abierto; varying vec2 vUv;
-      void main(){
-        float x = vUv.x*60.;
-        float rayas = pow(abs(sin(x + sin(x*.37+tiempo)*1.5)), 18.) + pow(abs(sin(x*.53 - tiempo*.7)), 30.)*.7;
-        float sube = fract(vUv.y*1.5 - tiempo*.25 + sin(x*.11)*.3);
-        float chispa = smoothstep(.97, 1., sube) * .8;
-        float borde = smoothstep(0., .12, vUv.y) * (1.-smoothstep(.55, 1., vUv.y)) * smoothstep(0.,.05,vUv.x)*smoothstep(1.,.95,vUv.x);
-        float a = (rayas*.5 + chispa*.7 + .08) * borde * (1.-abierto) * .42;
-        gl_FragColor = vec4(vec3(1.4,.95,.4)*a, 1.);
-      }`,
-  }));
-  barreraMalla.rotation.y = Math.PI / 2;
-  barreraMalla.position.set(DISENO.barrera, 2.0, 0);
-  escena.add(barreraMalla);
-  const colBarrera = { tipo: 'b', x: DISENO.barrera, z: 0, hx: 0.3, hz: 10, tope: 99 };
-  colisiones.push(colBarrera);
-  candidatasLuz.push({ pos: new THREE.Vector3(DISENO.barrera - 0.5, 1.5, 0), color: new THREE.Color(0xffc56a), fuerza: 3, barrera: true });
-  const barrera = {
-    abierta: false, progreso: 0,
-    abrir(inmediato = false) {
-      if (this.abierta) return;
-      this.abierta = true;
-      colBarrera.tope = -99;
-      if (inmediato) this.progreso = 1;
-    },
-  };
-  actualizables.push(({ dt }) => {
-    if (barrera.abierta && barrera.progreso < 1) barrera.progreso = Math.min(1, barrera.progreso + dt / 1.6);
-    uBarrera.abierto.value = barrera.progreso;
-    barreraMalla.visible = barrera.progreso < 1;
-    barreraMalla.scale.y = 1 - barrera.progreso * 0.6;
-  });
-
-  // ================================================================ Mirador y cofre
+  // ================================================================ Final: mirador y cofre
   const M = DISENO.mirador, yM = Math.max(0, alturaTerreno(M.x, M.z));
   colocar('SM_Mirador', M.x, yM, M.z);
   superficies.push({ tipo: 'c', x: M.x, z: M.z, r: 3.86, tope: yM + 0.6 });
@@ -630,9 +934,7 @@ export function construirMundo(escena, gltf, calidad) {
   const cofreX = M.x - 1.1, cofreY = yM + 0.6;
   const cofreGrupo = colocar('SM_CofreBase', cofreX, cofreY, M.z, -Math.PI / 2, 1.15);
   const tapa = new THREE.Group();
-  for (const p of piezas('SM_CofreTapa')) {
-    const m = new THREE.Mesh(p.geometria, mat(p.material)); m.castShadow = true; tapa.add(m);
-  }
+  for (const p of piezas('SM_CofreTapa')) { const m = new THREE.Mesh(p.geometria, mat(p.material)); m.castShadow = true; tapa.add(m); }
   tapa.position.set(0, 0.48, -0.31);
   cofreGrupo.add(tapa);
   colisiones.push({ tipo: 'b', x: cofreX, z: M.z, hx: 0.4, hz: 0.62, tope: 99 });
@@ -641,10 +943,7 @@ export function construirMundo(escena, gltf, calidad) {
   const destello = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(2.4, 1.6, 0.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
   destello.position.set(cofreX, cofreY + 0.75, M.z); destello.scale.setScalar(3);
   escena.add(destello);
-  const cofre = {
-    x: cofreX, z: M.z, y: cofreY, abierto: false, apertura: 0,
-    abrir(inmediato = false) { this.abierto = true; if (inmediato) this.apertura = 1; },
-  };
+  const cofre = { x: cofreX, z: M.z, y: cofreY, abierto: false, apertura: 0, abrir(inmediato = false) { this.abierto = true; if (inmediato) this.apertura = 1; } };
   actualizables.push(({ dt, t }) => {
     if (cofre.abierto && cofre.apertura < 1) cofre.apertura = Math.min(1, cofre.apertura + dt / 1.5);
     const e = 1 - Math.pow(1 - cofre.apertura, 3);
@@ -653,24 +952,23 @@ export function construirMundo(escena, gltf, calidad) {
     luzCofre.fuerza = 2 + e * 14;
   });
 
-  // ================================================================ Reparto de luces y animación
-  const tmp = new THREE.Vector3();
+  // ================================================================ Bucle
   let reloj = 0;
   function actualizar(t, dt, camara, foco, jugador) {
     uCielo.tiempo.value = t; uAgua.tiempo.value = t; uPasto.tiempo.value = t;
+    luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 330);
+    haloLuna.position.copy(luna.position);
     for (const f of actualizables) f({ t, dt, camara, jugador });
-    // sombra de la luna siguiendo al jugador
     luzLuna.target.position.copy(foco);
     luzLuna.position.copy(foco).addScaledVector(DIR_LUNA, 70);
-    // luces puntuales: las más cercanas al foco
     reloj -= dt;
     if (reloj <= 0) {
       reloj = 0.15;
-      const orden = candidatasLuz.filter((c) => !(c.barrera && barrera.progreso >= 1))
+      const orden = candidatasLuz.filter((c) => c.fuerza > 0 && !(c.cortina && c.cortina.progreso >= 1))
         .map((c) => ({ c, d: c.pos.distanceToSquared(foco) })).sort((a, b) => a.d - b.d);
       luces.forEach((l, i) => {
         const o = orden[i];
-        if (!o || o.d > 900) { l.intensity = 0; return; }
+        if (!o || o.d > 900) { l.userData.fuente = null; l.intensity = 0; return; }
         l.userData.fuente = o.c;
       });
     }
@@ -678,12 +976,10 @@ export function construirMundo(escena, gltf, calidad) {
       const c = l.userData.fuente;
       if (!c) continue;
       l.position.copy(c.pos); l.color.copy(c.color);
-      const parpadeo = 1 + Math.sin(t * 9 + c.pos.x * 3) * 0.04;
-      l.intensity = c.fuerza * parpadeo * (c.barrera ? 1 - barrera.progreso : 1);
+      l.intensity = c.fuerza * (1 + Math.sin(t * 9 + c.pos.x * 3) * 0.04) * (c.cortina ? 1 - c.cortina.progreso : 1);
     }
   }
 
-  // ================================================================ Física simple del escenario
   function alturaSuelo(x, z, y) {
     let h = alturaTerreno(x, z), sobre = null;
     for (const s of superficies) {
@@ -705,8 +1001,8 @@ export function construirMundo(escena, gltf, calidad) {
     }
     p.x = Math.min(LIMITE.xMax, Math.max(LIMITE.xMin, p.x));
     p.z = Math.min(LIMITE.z, Math.max(-LIMITE.z, p.z));
-    if (p.x > 52) p.z = Math.min(6, Math.max(-6, p.z));
+    if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
-  return { actualizar, alturaSuelo, resolverChoques, atriles, puertas, piedras, luciernagas, barrera, cofre, agua, luzLuna };
+  return { actualizar, alturaSuelo, resolverChoques, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

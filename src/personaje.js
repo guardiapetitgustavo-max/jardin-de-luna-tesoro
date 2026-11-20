@@ -42,7 +42,8 @@ export function crearPersonaje() {
   // ---- vestido (perfil girado) y torso
   const perfil = [];
   const puntosVestido = [[0.0, 1.13], [0.13, 1.12], [0.142, 1.02], [0.128, 0.95], [0.16, 0.86], [0.23, 0.72], [0.30, 0.58], [0.315, 0.55], [0.3, 0.535], [0.0, 0.535]];
-  for (const [x, y] of puntosVestido) perfil.push(new THREE.Vector2(x, y));
+  // El perfil va de abajo hacia arriba para que las caras miren hacia afuera (si no, la falda se ve transparente).
+  for (const [x, y] of [...puntosVestido].reverse()) perfil.push(new THREE.Vector2(x, y));
   const falda = new THREE.Mesh(new THREE.LatheGeometry(perfil, 40), vestido);
   falda.castShadow = true;
   cuerpo.add(falda);
@@ -87,7 +88,7 @@ export function crearPersonaje() {
   const flequillo = new THREE.Mesh(new THREE.SphereGeometry(0.124, 24, 10, Math.PI * 0.15, Math.PI * 0.7, Math.PI * 0.16, Math.PI * 0.22), pelo);
   flequillo.rotation.y = 0; flequillo.position.set(0, 0.018, 0.012); cabeza.add(flequillo);
   const melenaPivote = new THREE.Group(); melenaPivote.position.set(0, 0.05, -0.05); cabeza.add(melenaPivote);
-  const perfilPelo = [[0.0, 0.0], [0.115, -0.01], [0.13, -0.1], [0.125, -0.22], [0.11, -0.33], [0.085, -0.4], [0.0, -0.42]].map(([x, y]) => new THREE.Vector2(x, y));
+  const perfilPelo = [[0.0, 0.0], [0.115, -0.01], [0.13, -0.1], [0.125, -0.22], [0.11, -0.33], [0.085, -0.4], [0.0, -0.42]].reverse().map(([x, y]) => new THREE.Vector2(x, y));
   const melena = new THREE.Mesh(new THREE.LatheGeometry(perfilPelo, 24, Math.PI * 0.5, Math.PI), pelo);
   melena.scale.set(1.05, 1, 0.75); melena.castShadow = true; melenaPivote.add(melena);
   const flor = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), cinta);

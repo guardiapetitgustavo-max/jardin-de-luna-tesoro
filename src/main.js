@@ -60,12 +60,13 @@ function ajustar() {
 addEventListener('resize', ajustar);
 
 // ------------------------------------------------------------------ Estado de la aventura
-const nuevoEstado = () => ({ pistas: [false, false, false], puerta: false, estanque: false, luc: [], cofre: false, control: null });
+const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [] });
 let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
 const pistasLeidas = () => estado.pistas.filter(Boolean).length;
-const puedeAbrir = () => pistasLeidas() === 3 && estado.luc.length >= D.LUCIERNAGAS_NECESARIAS;
+const puedeAbrir = () => pistasLeidas() === D.PISTAS.length && estado.luc.length >= D.LUCIERNAGAS_NECESARIAS;
+let secuencia = [], placaPisada = null;
 
 // ------------------------------------------------------------------ Jugador y cámara
 let mundo, personaje;
@@ -226,14 +227,15 @@ function leerPista(i) {
   const p = D.PISTAS[i];
   const nueva = !estado.pistas[i];
   estado.pistas[i] = true; mundo.atriles[i].marcarLeida(true); guardar();
-  abrirPanel({ sub: `Pista ${i + 1} de 3`, titulo: p.titulo, cuerpo: `<p class="frase">«${p.texto}»</p>`, botones: [{ texto: 'Continuar' }] });
-  if (nueva && i === 2) setTimeout(() => $('filaLuc').classList.remove('oculta'), 200);
+  abrirPanel({ sub: `Pista ${i + 1} de ${D.PISTAS.length}`, titulo: p.titulo, cuerpo: `<p class="frase">«${p.texto}»</p>`, botones: [{ texto: 'Continuar' }] });
+  if (nueva && i === 2) $('filaRosas').classList.remove('oculta');
 }
 function abrirCofre() {
   if (estado.cofre) { mostrarCupones(); return; }
   if (!puedeAbrir()) {
     const faltan = [];
-    if (pistasLeidas() < 3) faltan.push(`${3 - pistasLeidas()} pista${3 - pistasLeidas() > 1 ? 's' : ''}`);
+    const np = D.PISTAS.length - pistasLeidas();
+    if (np > 0) faltan.push(`${np} pista${np > 1 ? 's' : ''}`);
     if (estado.luc.length < 7) faltan.push(`${7 - estado.luc.length} luciérnaga${7 - estado.luc.length > 1 ? 's' : ''}`);
     abrirPanel({ titulo: 'El cofre sigue cerrado', cuerpo: `<p>Te falta${faltan.length > 1 ? 'n' : ''} ${faltan.join(' y ')} para abrirlo.</p>`, botones: [{ texto: 'Entendido' }] });
     return;
@@ -260,6 +262,30 @@ function atraparLuciernaga(l) {
   guardar();
 }
 
+function pisarPlaca(placa) {
+  const esperado = D.ORDEN_FAROLES[secuencia.length];
+  if (placa.encendida) return;
+  if (placa.nombre === esperado) {
+    placa.encender(true); secuencia.push(placa.nombre);
+    if (secuencia.length === D.ORDEN_FAROLES.length) {
+      estado.faroles = true; guardar();
+      aviso('¡Los cuatro faroles brillan! El puente aparece sobre el barranco', 4);
+      mundo.puente.activar();
+    } else aviso(`Farol ${secuencia.length} de 4`, 1.4);
+  } else {
+    mundo.placas.forEach((q) => { q.encender(false); q.error(); });
+    secuencia = [];
+    aviso(estado.pistas[3] ? 'Ese no era el orden. Vuelve a empezar' : 'Primero lee la pista junto a la fuente', 2.6);
+  }
+}
+let cartelTiempo = 0;
+function cartelNivel(nv) {
+  const c = $('cartel');
+  $('cartelNum').textContent = nv.final ? 'Final' : `Nivel ${nv.numero}`;
+  $('cartelNombre').textContent = nv.nombre;
+  c.classList.add('ver'); cartelTiempo = 3.2;
+}
+
 function buscarCercano() {
   const p = jugador.pos;
   for (const a of mundo.atriles) if (Math.hypot(p.x - a.x, p.z - a.z) < 1.9) return { tipo: 'atril', atril: a, texto: a.leida ? 'Volver a leer' : 'Leer la pista' };
@@ -269,16 +295,25 @@ function buscarCercano() {
 }
 
 function objetivo() {
-  const A = mundo.atriles;
+  const A = mundo.atriles, p = jugador.pos;
+  const masCercana = (lista, pos) => { let m = null, d = Infinity; for (const o of lista) { const dd = pos(o).distanceTo(p); if (dd < d) { d = dd; m = o; } } return m; };
   if (!estado.pistas[0]) return ['Lee la pista junto al arco de entrada', A[0].orbe.position];
   if (!estado.puerta) return ['Cruza la puerta que brilla como el sol', null];
   if (!estado.pistas[1]) return ['Lee la pista a orillas del estanque', A[1].orbe.position];
   if (!estado.estanque) return ['Cruza el estanque saltando de piedra en piedra', new THREE.Vector3(DISENO.controles.estanqueDespues, 0.8, 0)];
-  if (!estado.pistas[2]) return ['Lee la pista a la entrada del bosque', A[2].orbe.position];
+  if (!estado.pistas[2]) return ['Lee la pista a la entrada del laberinto', A[2].orbe.position];
+  if (estado.rosas.length < D.ROSAS_NECESARIAS) {
+    const r = masCercana(mundo.rosas.filter((x) => !x.tomada), (x) => x.grupo.position);
+    return [`Encuentra las rosas de luz del laberinto (${estado.rosas.length}/${D.ROSAS_NECESARIAS})`, r?.grupo.position];
+  }
+  const L = mundo.laberinto;
+  if (p.x < L.x0 + L.columnas * L.celda + 0.6) return ['Sal del laberinto por la reja de rosas', new THREE.Vector3(L.x0 + L.columnas * L.celda, 1.5, L.z0 + L.filaSalida * L.celda + 1)];
+  if (!estado.pistas[3]) return ['Lee la pista junto a la fuente', A[3].orbe.position];
+  if (!estado.faroles) return [`Enciende los faroles en el orden de la pista (${secuencia.length}/4)`, null];
+  if (p.x < DISENO.controles.barrancoDespues) return ['Cruza el barranco por el puente de piedras', new THREE.Vector3(DISENO.controles.barrancoDespues, 0.8, 0)];
   if (estado.luc.length < D.LUCIERNAGAS_NECESARIAS) {
-    let mejor = null, d = Infinity;
-    for (const l of mundo.luciernagas) if (!l.atrapada) { const dd = l.malla.position.distanceTo(jugador.pos); if (dd < d) { d = dd; mejor = l; } }
-    return [`Atrapa las luciérnagas del bosque (${estado.luc.length}/${D.LUCIERNAGAS_NECESARIAS})`, mejor?.malla.position];
+    const l = masCercana(mundo.luciernagas.filter((x) => !x.atrapada), (x) => x.malla.position);
+    return [`Atrapa las luciérnagas del bosque (${estado.luc.length}/${D.LUCIERNAGAS_NECESARIAS})`, l?.malla.position];
   }
   if (!estado.cofre) return ['Sube al mirador y abre el cofre', new THREE.Vector3(mundo.cofre.x, mundo.cofre.y + 1.1, mundo.cofre.z)];
   return ['Encontraste el tesoro. Pasea por el jardín', null];
@@ -349,7 +384,7 @@ function pasoJugador(dt) {
 function reglas() {
   const p = jugador.pos;
   // agua
-  if (!enAgua && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
+  if (!enAgua && p.x > 21 && p.x < 38.5 && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
     enAgua = true;
     salpicar(p.x, p.z);
     reaparecer('¡Splash! Vuelve a intentarlo saltando de piedra en piedra');
@@ -370,7 +405,40 @@ function reglas() {
   if (!estado.estanque && p.x > DISENO.controles.estanqueDespues && jugador.enSuelo && alturaTerreno(p.x, p.z) > NIVEL_AGUA) {
     estado.estanque = true; aviso('¡Cruzaste el estanque!'); puntoControl(DISENO.controles.estanqueDespues + 0.3, 0, 0);
   }
-  if (p.x > 52.4 && (!estado.control || estado.control.x < 52)) puntoControl(52.6, 0, 0);
+  const C = DISENO.controles, avanzar = (x, z = 0) => { if (!estado.control || estado.control.x < x - 0.1) puntoControl(x, z, 0); };
+  if (estado.estanque && p.x > 37 && p.x < 40) avanzar(C.estanqueDespues + 0.3);
+  if (mundo.reja.abierta && p.x > C.laberintoSalida) avanzar(C.laberintoSalida + 0.3, 1);
+  if (estado.faroles && p.x > C.barrancoAntes - 1 && p.x < 84) avanzar(C.barrancoAntes);
+  if (p.x > C.barrancoDespues && jugador.enSuelo && p.y > -0.3) avanzar(C.barrancoDespues + 0.3);
+  if (p.x > C.mirador) avanzar(C.mirador + 0.2);
+  // nenúfares que se hunden
+  if (jugador.sobre?.pisada) jugador.sobre.pisada(t);
+  // caída al barranco
+  if (!enAgua && p.y < -1.3) {
+    enAgua = true;
+    reaparecer('¡Cuidado con el barranco! Espera a que las piedras se acerquen');
+    setTimeout(() => (enAgua = false), 700);
+  }
+  // rosas del laberinto
+  for (const r of mundo.rosas) {
+    if (r.tomada || Math.hypot(p.x - r.x, p.z - r.z) > 0.9) continue;
+    r.tomar();
+    if (!estado.rosas.includes(r.id)) estado.rosas.push(r.id);
+    $('filaRosas').classList.remove('oculta');
+    const n = estado.rosas.length;
+    if (n >= D.ROSAS_NECESARIAS) { mundo.reja.abrir(); aviso('La reja de rosas se abre'); }
+    else aviso(`Rosa ${n} de ${D.ROSAS_NECESARIAS}`, 1.8);
+    guardar();
+  }
+  // placas de los cuatro faroles
+  if (!estado.faroles) {
+    const placa = jugador.enSuelo ? mundo.placas.find((q) => Math.hypot(p.x - q.x, p.z - q.z) < 0.78) : null;
+    if (placa && placa !== placaPisada) pisarPlaca(placa);
+    placaPisada = placa || null;
+  }
+  // carteles de nivel
+  const nv = D.nivelEn(p.x);
+  if (nv && !estado.niveles.includes(nv.numero)) { estado.niveles.push(nv.numero); cartelNivel(nv); guardar(); }
   // luciérnagas
   tmp.copy(p); tmp.y += 1.0;
   for (const l of mundo.luciernagas) if (!l.atrapada && l.malla.position.distanceTo(tmp) < 1.15) atraparLuciernaga(l);
@@ -402,8 +470,8 @@ function pasoCamara(dt) {
 
 // cámara de la portada: recorre el jardín despacio
 function pasoPortada(t) {
-  const u = (t * 0.018) % 1;
-  const x = THREE.MathUtils.lerp(-2, 50, (Math.sin(u * Math.PI * 2 - Math.PI / 2) + 1) / 2);
+  const u = (t * 0.009) % 1;
+  const x = THREE.MathUtils.lerp(-2, 104, (Math.sin(u * Math.PI * 2 - Math.PI / 2) + 1) / 2);
   camara.position.set(x, 2.3 + Math.sin(t * 0.2) * 0.3, Math.sin(t * 0.13) * 1.6);
   camara.lookAt(x + 12, 2.6, Math.sin(t * 0.1) * 2);
 }
@@ -411,8 +479,9 @@ function pasoPortada(t) {
 function actualizarHUD() {
   const [texto, punto] = objetivo();
   $('objetivo').textContent = texto;
-  const zona = D.ZONAS.find(([x]) => jugador.pos.x < x)[1];
-  $('zona').textContent = zona;
+  const nv = D.nivelEn(jugador.pos.x);
+  $('zona').textContent = nv.final ? nv.nombre : `Nivel ${nv.numero} · ${nv.nombre}`;
+  $('cRosas').textContent = estado.rosas.length;
   $('cPistas').textContent = pistasLeidas();
   $('cLuc').textContent = estado.luc.length;
   const cerca = buscarCercano();
@@ -466,6 +535,7 @@ function cuadro() {
       if (a.edad > 0.9) { escena.remove(a.m); a.m.geometry.dispose(); anillos.splice(i, 1); }
     }
     if (avisoTiempo > 0) { avisoTiempo -= dt; if (avisoTiempo <= 0) $('aviso').classList.remove('ver'); }
+    if (cartelTiempo > 0) { cartelTiempo -= dt; if (cartelTiempo <= 0) $('cartel').classList.remove('ver'); }
     pasoFinal.uniforms.tiempo.value = t;
     composer.render(dt);
     // calidad adaptable: si va lento, baja la resolución
@@ -493,8 +563,13 @@ function comenzar(continuar) {
     if (l.atrapada) { l.malla.position.set(estado.control?.x ?? 0, 1.5, estado.control?.z ?? 0); }
   }
   if (estado.luc.length >= D.LUCIERNAGAS_NECESARIAS) mundo.barrera.abrir(true);
+  for (const r of mundo.rosas) if (estado.rosas.includes(r.id)) r.tomar();
+  if (estado.rosas.length >= D.ROSAS_NECESARIAS) mundo.reja.abrir(true);
+  secuencia = [];
+  if (estado.faroles) { mundo.placas.forEach((q) => q.encender(true)); mundo.puente.activar(true); }
+  $('filaRosas').classList.toggle('oculta', !(estado.pistas[2] || estado.rosas.length));
   if (estado.cofre) mundo.cofre.abrir(true);
-  $('filaLuc').classList.toggle('oculta', !(estado.pistas[2] || estado.luc.length));
+  $('filaLuc').classList.toggle('oculta', !(estado.faroles || estado.luc.length));
   $('portada').hidden = true;
   fundido(() => {
     const c = estado.control || DISENO.inicio;
@@ -553,6 +628,10 @@ function exponerPruebas() {
     teclas, interactuar, saltar: () => (pedirSalto = true),
     jugador: () => ({ x: jugador.pos.x, y: jugador.pos.y, z: jugador.pos.z, suelo: jugador.enSuelo }),
     atrapar: () => mundo.luciernagas.forEach((l) => !l.atrapada && atraparLuciernaga(l)),
+    rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
+    reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
+    placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
+    nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),
     info: () => renderer.info.render,
     // avanza el juego con pasos fijos de 1/60 s (sin depender de la velocidad del navegador de pruebas)
     simular: (segundos, keys = [], saltarEn = -1) => {

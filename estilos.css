@@ -52,6 +52,7 @@ h1 { font: 600 clamp(44px, 9vw, 92px)/.95 var(--serif); margin: 14px 0 10px; let
 .contadores .oculta { display: none; }
 .icono { width: 10px; height: 10px; border-radius: 50%; display: inline-block; align-self: center; }
 .icono.pista { background: #f2c27a; box-shadow: 0 0 10px #f2c27a; }
+.icono.rosa { background: #ff7eb3; box-shadow: 0 0 10px #ff5fa0; }
 .icono.luc { background: #fff1a0; box-shadow: 0 0 12px 2px #ffe66b; }
 .redondo { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; width: 48px; height: 48px; padding: 0; background: var(--vidrio); border: 1px solid var(--borde); color: var(--crema); font-size: 13px; backdrop-filter: blur(10px); }
 #marca { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none !important; transition: opacity .3s; }
@@ -61,8 +62,13 @@ h1 { font: 600 clamp(44px, 9vw, 92px)/.95 var(--serif); margin: 14px 0 10px; let
 #flecha { position: absolute; width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 20px solid rgba(255, 226, 176, .9); filter: drop-shadow(0 0 8px rgba(255, 200, 120, .8)); pointer-events: none !important; display: none; }
 #accion { position: absolute; left: 50%; bottom: max(34px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: var(--vidrio); color: var(--crema); border: 1px solid var(--borde); backdrop-filter: blur(10px); padding: 10px 22px 10px 10px; animation: aparece .3s ease both; }
 #accion kbd { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(160deg, #ffe0ad, #d8964f); color: var(--tinta); font: 800 15px var(--sans); }
-#aviso { position: absolute; left: 50%; top: 22%; transform: translate(-50%, 0); font: italic 600 clamp(22px, 3.4vw, 30px) var(--serif); text-align: center; color: #fff0d6; text-shadow: 0 2px 24px rgba(0, 0, 0, .9), 0 0 30px rgba(255, 190, 110, .35); opacity: 0; transition: opacity .5s, transform .5s; pointer-events: none !important; width: min(90vw, 760px); }
+#aviso { position: absolute; left: 50%; top: auto; bottom: 24%; transform: translate(-50%, 0); font: italic 600 clamp(22px, 3.4vw, 30px) var(--serif); text-align: center; color: #fff0d6; text-shadow: 0 2px 24px rgba(0, 0, 0, .9), 0 0 30px rgba(255, 190, 110, .35); opacity: 0; transition: opacity .5s, transform .5s; pointer-events: none !important; width: min(90vw, 760px); }
 #aviso.ver { opacity: 1; transform: translate(-50%, -6px); }
+#cartel { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(.96); text-align: center; opacity: 0; transition: opacity .7s ease, transform .9s ease; pointer-events: none !important; width: min(92vw, 820px); }
+#cartel.ver { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#cartel span { display: block; font: 700 13px var(--sans); letter-spacing: .5em; text-transform: uppercase; color: var(--oro); text-shadow: 0 2px 14px #000; }
+#cartel strong { display: block; font: 600 clamp(38px, 7vw, 74px)/1 var(--serif); color: #fff3df; margin-top: 10px; text-shadow: 0 4px 40px rgba(0, 0, 0, .9), 0 0 50px rgba(255, 190, 110, .35); }
+#cartel::after { content: ""; display: block; width: 120px; height: 1px; margin: 18px auto 0; background: linear-gradient(90deg, transparent, var(--oro), transparent); }
 #ayudaRaton { position: absolute; bottom: 14px; right: 18px; margin: 0; font-size: 13px; color: rgba(255, 241, 220, .55); pointer-events: none !important; }
 #fundido { position: fixed; inset: 0; background: #02060c; opacity: 0; pointer-events: none; z-index: 8; transition: opacity .35s ease; }
 
