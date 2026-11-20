@@ -11,7 +11,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { construirMundo, alturaTerreno, DISENO, NIVEL_AGUA } from './mundo.js';
 import { crearPersonaje } from './personaje.js';
 import * as D from './datos.js';
-import { iniciarSonido, alternarSonido, sonidos } from './sonido.js';
+import { iniciarSonido, alternarSonido, sonidos, campana, NOTAS_CAMPANAS, cajaMusica } from './sonido.js';
 
 const $ = (id) => document.getElementById(id);
 const parametros = new URLSearchParams(location.search);
@@ -37,7 +37,7 @@ renderer.info.autoReset = false;
 
 const escena = new THREE.Scene();
 // lo que está a más de ~100 m ya lo tapa la niebla: no se dibuja (el cielo se pinta aparte, siempre al fondo)
-const camara = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, alta ? 105 : 90);
+const camara = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, alta ? 92 : 82);
 camara.layers.enable(1); // capa 1: pasto (no se refleja en el agua)
 
 // sin MSAA en el composer: en algunas tarjetas el multimuestreo en media precisión deja la pantalla en blanco
@@ -111,7 +111,8 @@ addEventListener('resize', ajustar);
 ajustar(); // tamaño correcto desde el primer cuadro (si no, los efectos quedaban de 1×1 y la pantalla salía de un solo color)
 
 // ------------------------------------------------------------------ Estado de la aventura
-const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], deseos: 0 });
+const nuevoEstado = () => ({ pistas: D.PISTAS.map(() => false), puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], deseos: 0,
+  rio: false, campanas: false, estatuas: false, giros: null, mariposas: [], escalera: false, recuerdos: [] });
 let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
@@ -294,7 +295,69 @@ function interactuar() {
   const cerca = buscarCercano();
   if (!cerca) return;
   if (cerca.tipo === 'atril') leerPista(cerca.atril.indice);
+  else if (cerca.tipo === 'campana') tocarCampana(cerca.campana);
+  else if (cerca.tipo === 'piedra') cantarPiedra();
+  else if (cerca.tipo === 'estatua') girarEstatua(cerca.estatua);
   else abrirCofre();
+}
+
+// ---------------------------------------------------------------- Nivel 7: campanas de viento
+let melodia = [], cantando = false;
+const notaDe = (b) => NOTAS_CAMPANAS[mundo.campanas.orden.indexOf(b.i)];
+function tocarCampana(b) {
+  campana(notaDe(b));
+  if (estado.campanas || cantando) { b.tocar(t, true); return; }
+  const esperado = mundo.campanas.orden[melodia.length];
+  if (b.i === esperado) {
+    b.tocar(t, true); b.acierto = true; melodia.push(b.i);
+    if (melodia.length === 4) {
+      estado.campanas = true; guardar();
+      mundo.campanas.puerta.abrir();
+      setTimeout(() => sonidos.logro(), 700);
+      aviso('¡Qué bonita canción! El arco de las campanas se abre', 4);
+    } else aviso(`Campana ${melodia.length} de 4`, 1.4);
+  } else {
+    b.tocar(t, false); melodia = []; mundo.campanas.lista.forEach((x) => (x.acierto = false));
+    setTimeout(() => sonidos.error(), 250);
+    aviso('Esa no seguía. Empieza otra vez por la más grande (la piedra del centro te canta la canción)', 3.6);
+  }
+}
+function cantarPiedra() {
+  if (cantando) return;
+  cantando = true;
+  aviso('La piedra canta la canción de las campanas…', 3);
+  mundo.campanas.orden.forEach((i, k) => setTimeout(() => { const b = mundo.campanas.lista[i]; b.tocar(t, true); campana(notaDe(b), 0.07); }, 600 + k * 750));
+  setTimeout(() => { cantando = false; if (!estado.campanas) { melodia = []; mundo.campanas.lista.forEach((x) => (x.acierto = false)); } }, 600 + 4 * 750);
+}
+
+// ---------------------------------------------------------------- Nivel 8: estatuas
+function girarEstatua(s) {
+  if (estado.estatuas) return;
+  s.girar(); sonidos.piedra();
+  estado.giros = mundo.estatuas.lista.map((x) => x.giros); guardar();
+  const bien = mundo.estatuas.lista.filter((x) => x.mira()).length;
+  if (bien === 3) {
+    estado.estatuas = true; guardar();
+    setTimeout(() => { mundo.estatuas.puerta.abrir(); sonidos.logro(); aviso('Las tres estatuas miran a la luna. El arco se abre', 4); }, 900);
+  } else if (s.mira()) setTimeout(() => { sonidos.objeto(); aviso(`Esta ya mira a la luna (${bien} de 3)`, 1.8); }, 700);
+}
+function atraparMariposa(b) {
+  b.atrapada = true; b.orden = estado.mariposas.length;
+  if (!estado.mariposas.includes(b.id)) estado.mariposas.push(b.id);
+  const n = estado.mariposas.length;
+  sonidos.mariposa();
+  if (n >= D.MARIPOSAS_NECESARIAS) { mundo.puertaInvernadero.abrir(); aviso('Las mariposas te abren la puerta del invernadero', 3.6); setTimeout(() => sonidos.logro(), 400); }
+  else aviso(`Mariposa ${n} de ${D.MARIPOSAS_NECESARIAS}`, 1.6);
+  guardar();
+}
+function tomarRecuerdo(o) {
+  o.tomar();
+  if (!estado.recuerdos.includes(o.id)) estado.recuerdos.push(o.id);
+  const R = D.RECUERDOS[o.id];
+  sonidos.recuerdo();
+  $('filaRec').classList.remove('oculta');
+  aviso(`Encontraste un recuerdo: ${R.icono} ${R.nombre} (${estado.recuerdos.length}/10)`, 3);
+  guardar();
 }
 function leerPista(i) {
   const p = D.PISTAS[i];
@@ -305,7 +368,7 @@ function leerPista(i) {
   if (nueva && i === 2) $('filaRosas').classList.remove('oculta');
 }
 function abrirCofre() {
-  if (estado.cofre) { mostrarCupones(); return; }
+  if (estado.cofre) { cajaMusica.iniciar(); mostrarRecuerdos(); return; }
   if (!puedeAbrir()) {
     const faltan = [];
     const np = D.PISTAS.length - pistasLeidas();
@@ -318,11 +381,11 @@ function abrirCofre() {
   mundo.cofre.abrir();
   sonidos.final();
   aviso('El cofre se abre…', 2);
-  setTimeout(mostrarCarta, 2600); // primero se ve abrirse el cofre, luego sale la carta
+  setTimeout(() => { cajaMusica.iniciar(); mostrarCarta(); }, 2600); // primero se ve abrirse el cofre, luego sale la carta (con caja de música)
 }
 // ---------------------------------------------------------------- Final: carta, cupones y luego la cámara sube al cielo
 function mostrarCarta() {
-  abrirPanel({ sub: 'Una carta para ti', titulo: `Para ${D.DESTINATARIA}`, cuerpo: '<div class="carta" id="carta"></div>', botones: [{ texto: 'Abrir el tesoro', accion: () => setTimeout(mostrarCupones, 250) }] });
+  abrirPanel({ sub: 'Una carta para ti', titulo: `Para ${D.DESTINATARIA}`, cuerpo: '<div class="carta" id="carta"></div>', botones: [{ texto: 'Abrir el tesoro', accion: () => setTimeout(mostrarRecuerdos, 250) }] });
   const caja = $('carta'), parrafos = [...D.CARTA, D.FIRMA];
   let i = 0, j = 0, p = null;
   const escribir = () => {
@@ -333,6 +396,18 @@ function mostrarCarta() {
     if (j >= parrafos[i].length) { i++; j = 0; p = null; setTimeout(escribir, 420); } else setTimeout(escribir, 22);
   };
   escribir();
+}
+function mostrarRecuerdos() {
+  const n = estado.recuerdos.length;
+  const items = D.RECUERDOS.map((r, i) => {
+    const tiene = estado.recuerdos.includes(i);
+    return `<li class="${tiene ? '' : 'falta'}" style="animation-delay:${0.08 + i * 0.07}s"><span class="ico">${tiene ? r.icono : '?'}</span><b>${tiene ? r.nombre : 'Sin encontrar'}</b><small>${tiene ? r.texto : `Nivel ${i + 1}`}</small></li>`;
+  }).join('');
+  abrirPanel({
+    sub: `${n} de 10 recuerdos`, titulo: 'Tus recuerdos del jardín',
+    cuerpo: `<ul class="recuerdos">${items}</ul><p class="suave">${n === 10 ? '¡Los encontraste todos!' : 'Los que faltan siguen escondidos en el jardín: puedes volver a buscarlos.'}</p>`,
+    botones: [{ texto: 'Ver los cupones', accion: () => setTimeout(mostrarCupones, 250) }],
+  });
 }
 function mostrarCupones() {
   abrirPanel({
@@ -347,6 +422,8 @@ function iniciarCine() {
   if (cine) return;
   if (document.pointerLockElement) document.exitPointerLock();
   mundo.celebrar(true);
+  mundo.estrellaKimberly.mostrar();
+  cajaMusica.iniciar();
   cineDesde.copy(camara.position);
   cineMira.copy(cam.foco);
   cine = { t: 0, dur: 8 };
@@ -373,6 +450,7 @@ function salirCielo() {
   if (!cine || cine.t < 6) return;
   cine = null;
   mundo.celebrar(false);
+  cajaMusica.parar();
   $('dedicatoriaFinal').classList.remove('ver');
   $('volverFinal').classList.remove('ver');
   fundido(() => {
@@ -418,8 +496,14 @@ function cartelNivel(nv) {
 function buscarCercano() {
   const p = jugador.pos;
   for (const a of mundo.atriles) if (Math.hypot(p.x - a.x, p.z - a.z) < 1.9) return { tipo: 'atril', atril: a, texto: a.leida ? 'Volver a leer' : 'Leer la pista' };
+  if (p.x > 128 && p.x < 142) {
+    for (const b of mundo.campanas.lista) if (Math.hypot(p.x - b.x, p.z - b.z) < 1.7) return { tipo: 'campana', campana: b, texto: 'Tocar la campana' };
+    const q = mundo.campanas.piedra;
+    if (Math.hypot(p.x - q.x, p.z - q.z) < 1.7) return { tipo: 'piedra', texto: 'Escuchar la canción' };
+  }
+  if (p.x > 144 && p.x < 157 && !estado.estatuas) for (const e of mundo.estatuas.lista) if (Math.hypot(p.x - e.x, p.z - e.z) < 1.8) return { tipo: 'estatua', estatua: e, texto: 'Girar la estatua' };
   const c = mundo.cofre;
-  if (Math.hypot(p.x - c.x, p.z - c.z) < 2.1 && p.y > c.y - 0.3) return { tipo: 'cofre', texto: estado.cofre ? 'Volver a mirar el cielo' : 'Abrir el cofre' };
+  if (Math.hypot(p.x - c.x, p.z - c.z) < 2.1 && p.y > c.y - 0.3) return { tipo: 'cofre', texto: estado.cofre ? 'Volver a abrir el cofre' : 'Abrir el cofre' };
   return null;
 }
 
@@ -446,7 +530,30 @@ function objetivo() {
     const l = masCercana(mundo.luciernagas.filter((x) => !x.atrapada), (x) => x.malla.position);
     return [`Atrapa las luciérnagas del bosque (${estado.luc.length}/${D.LUCIERNAGAS_NECESARIAS})`, l?.malla.position];
   }
-  if (!estado.cofre) return ['Sube al mirador y abre el cofre', new THREE.Vector3(mundo.cofre.x, mundo.cofre.y + 1.1, mundo.cofre.z)];
+  if (p.x < DISENO.barrera + 1) return ['Cruza la cortina de luz hacia el río', new THREE.Vector3(DISENO.barrera + 2, 1.2, 0)];
+  const C = DISENO.controles;
+  if (falta(4)) return ['Lee la pista junto al río', A[4].orbe.position];
+  if (!estado.rio) return ['Cruza el río saltando a las balsas de linterna', new THREE.Vector3(C.rioDespues, 0.8, 0)];
+  if (falta(5)) return ['Lee la pista de las campanas', A[5].orbe.position];
+  if (!estado.campanas) {
+    const q = mundo.campanas.piedra;
+    return [`Toca las campanas de la más grande a la más pequeña (${melodia.length}/4)`, new THREE.Vector3(q.x, q.y + 1.4, q.z)];
+  }
+  if (falta(6)) return ['Lee la pista del jardín de las estatuas', A[6].orbe.position];
+  if (!estado.estatuas) {
+    const L = mundo.estatuas.lista, mal = L.filter((x) => !x.mira());
+    const e = masCercana(mal.length ? mal : L, (x) => tmp2.set(x.x, x.y + 2.2, x.z).clone());
+    return [`Gira las estatuas hasta que miren a la luna (${L.length - mal.length}/3)`, e ? new THREE.Vector3(e.x, e.y + 2.6, e.z) : null];
+  }
+  if (estado.mariposas.length < D.MARIPOSAS_NECESARIAS) {
+    const b = masCercana(mundo.mariposas.filter((x) => !x.atrapada), (x) => x.grupo.position);
+    return [`Atrapa las mariposas del invernadero (${estado.mariposas.length}/${D.MARIPOSAS_NECESARIAS})`, b?.grupo.position];
+  }
+  if (!estado.escalera) {
+    const sig = mundo.escalera.estrellas.find((e) => e.sup.tope > p.y + 0.2) || mundo.escalera.estrellas[mundo.escalera.estrellas.length - 1];
+    return ['Sube la escalera de estrellas hasta lo alto', p.x < 176 ? new THREE.Vector3(C.escalera + 1, 1, 0) : new THREE.Vector3(sig.sup.x, sig.sup.tope + 0.8, sig.sup.z)];
+  }
+  if (!estado.cofre) return ['Abre el cofre del mirador', new THREE.Vector3(mundo.cofre.x, mundo.cofre.y + 1.1, mundo.cofre.z)];
   return ['Encontraste el tesoro. Pasea por el jardín', null];
 }
 
@@ -454,7 +561,8 @@ function objetivo() {
 const reloj = new THREE.Clock();
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 let t = 0, xAnterior = 0, enAgua = false;
-const caidas = { estanque: 0, puente: 0 };
+const caidas = { estanque: 0, puente: 0, rio: 0, escalera: 0 };
+let enEscalera = false;
 const ambiente = { buho: 15, rana: 3 };
 let fps = { cuadros: 0, tiempo: 0 }, cuadroN = 0;
 
@@ -517,12 +625,19 @@ function pasoJugador(dt) {
 function reglas() {
   const p = jugador.pos;
   // agua
-  if (!enAgua && p.x > 21 && p.x < 38.5 && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
+  const enRio = Math.abs(p.x - DISENO.rio.x) < 4.3;
+  if (!enAgua && ((p.x > 21 && p.x < 38.5) || enRio) && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
     enAgua = true;
     salpicar(p.x, p.z); sonidos.agua();
-    caidas.estanque++;
-    if (caidas.estanque >= 3 && !mundo.ayuda.estanque) { mundo.ayuda.estanque = true; setTimeout(() => aviso('Te dejé las piedras quietas para que cruces más fácil', 3.5), 900); }
-    reaparecer('¡Splash! Salta de piedra en piedra (mantén adelante y presiona saltar)');
+    if (enRio) {
+      caidas.rio++;
+      if (caidas.rio >= 3 && !mundo.ayuda.rio) { mundo.ayuda.rio = true; setTimeout(() => aviso('Te dejé las balsas quietas para que cruces más fácil', 3.5), 900); }
+      reaparecer('¡Splash! Espera a que la balsa se acerque y salta');
+    } else {
+      caidas.estanque++;
+      if (caidas.estanque >= 3 && !mundo.ayuda.estanque) { mundo.ayuda.estanque = true; setTimeout(() => aviso('Te dejé las piedras quietas para que cruces más fácil', 3.5), 900); }
+      reaparecer('¡Splash! Salta de piedra en piedra (mantén adelante y presiona saltar)');
+    }
     setTimeout(() => (enAgua = false), 700);
   }
   // puertas
@@ -545,7 +660,23 @@ function reglas() {
   if (mundo.reja.abierta && p.x > C.laberintoSalida) avanzar(C.laberintoSalida + 0.3, 1);
   if (estado.faroles && p.x > C.barrancoAntes - 1 && p.x < 84) avanzar(C.barrancoAntes);
   if (p.x > C.barrancoDespues && jugador.enSuelo && p.y > -0.3) avanzar(C.barrancoDespues + 0.3);
-  if (p.x > C.mirador) avanzar(C.mirador + 0.2);
+  // niveles 6 a 10: puntos de control
+  if (p.x > C.rioAntes && p.x < 115.2) avanzar(C.rioAntes);
+  if (!estado.rio && p.x > C.rioDespues && jugador.enSuelo && alturaTerreno(p.x, p.z) > NIVEL_AGUA) { estado.rio = true; aviso('¡Cruzaste el río!'); sonidos.objeto(); }
+  if (estado.rio && p.x > C.rioDespues) avanzar(C.rioDespues + 0.3);
+  if (p.x > C.campanas) avanzar(C.campanas);
+  if (estado.campanas && p.x > C.estatuas) avanzar(C.estatuas);
+  if (estado.estatuas && p.x > C.invernadero) avanzar(C.invernadero);
+  if (p.x > C.escalera && p.y < 1) avanzar(C.escalera);
+  // escalera de estrellas: si se cae, ayuda a la tercera vez
+  if (jugador.sobre?.estrella) enEscalera = true;
+  else if (enEscalera && jugador.enSuelo && p.y < 1.2) {
+    enEscalera = false; caidas.escalera++;
+    if (caidas.escalera >= 3 && !mundo.ayuda.escalera) { mundo.ayuda.escalera = true; aviso('Las estrellas ahora son más grandes y no se mueven', 3.5); }
+    else aviso('Casi… vuelve a la primera estrella', 2);
+  }
+  if (!estado.escalera && p.x > DISENO.meseta.x + 0.3 && p.y > DISENO.meseta.alto - 0.4) { estado.escalera = true; enEscalera = false; aviso('¡Llegaste a lo alto! El mirador te espera', 3.2); sonidos.logro(); }
+  if (p.x > C.mirador && p.y > DISENO.meseta.alto - 0.5) avanzar(C.mirador + 0.2);
   // nenúfares que se hunden
   if (jugador.sobre?.pisada) jugador.sobre.pisada(t);
   // caída al barranco
@@ -583,6 +714,9 @@ function reglas() {
   // luciérnagas
   tmp.copy(p); tmp.y += 1.0;
   for (const l of mundo.luciernagas) if (!l.atrapada && l.malla.position.distanceTo(tmp) < 1.15) atraparLuciernaga(l);
+  for (const b of mundo.mariposas) if (!b.atrapada && b.grupo.position.distanceTo(tmp) < 1.25) atraparMariposa(b);
+  // recuerdos
+  for (const o of mundo.recuerdos) if (!o.tomado && Math.hypot(p.x - o.x, p.z - o.z) < 0.95 && Math.abs(p.y + 0.9 - o.y) < 1.25) tomarRecuerdo(o);
 }
 
 // salpicadura: anillos que se expanden en el agua
@@ -683,6 +817,7 @@ function actualizarHUD() {
   $('cRosas').textContent = estado.rosas.length;
   $('cPistas').textContent = pistasLeidas();
   $('cLuc').textContent = estado.luc.length;
+  $('cRec').textContent = estado.recuerdos.length;
   const cerca = buscarCercano();
   $('accion').hidden = !cerca || modo !== 'juego';
   if (cerca) $('accionTexto').textContent = cerca.texto;
@@ -765,8 +900,20 @@ function comenzar(continuar) {
   const guardado = continuar ? cargarGuardado() : null;
   estado = guardado || nuevoEstado();
   if (!continuar) try { localStorage.removeItem(CLAVE); } catch {}
+  // partidas guardadas con menos pistas o sin los niveles nuevos
+  estado.pistas = D.PISTAS.map((_, i) => !!estado.pistas[i]);
+  for (const [k, v] of Object.entries(nuevoEstado())) if (estado[k] === undefined) estado[k] = v;
   // aplicar el progreso guardado al mundo
   estado.pistas.forEach((l, i) => mundo.atriles[i].marcarLeida(l));
+  melodia = [];
+  if (estado.campanas) { mundo.campanas.puerta.abrir(true); mundo.campanas.lista.forEach((b) => (b.acierto = true)); }
+  if (estado.giros) mundo.estatuas.lista.forEach((e, i) => e.poner(estado.giros[i] ?? e.giros));
+  if (estado.estatuas) { mundo.estatuas.lista.forEach((e) => e.poner(0)); mundo.estatuas.puerta.abrir(true); }
+  for (const b of mundo.mariposas) { b.atrapada = estado.mariposas.includes(b.id); b.orden = estado.mariposas.indexOf(b.id); }
+  if (estado.mariposas.length >= D.MARIPOSAS_NECESARIAS) mundo.puertaInvernadero.abrir(true);
+  for (const o of mundo.recuerdos) if (estado.recuerdos.includes(o.id)) o.tomar();
+  $('filaRec').classList.toggle('oculta', !estado.recuerdos.length);
+  if (estado.cofre) mundo.estrellaKimberly.mostrar(true);
   for (const l of mundo.luciernagas) {
     l.atrapada = estado.luc.includes(l.id);
     l.orden = estado.luc.indexOf(l.id);
@@ -902,6 +1049,12 @@ function exponerPruebas() {
     atrapar: () => mundo.luciernagas.forEach((l) => !l.atrapada && atraparLuciernaga(l)),
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
     mapaVisible: () => lienzoMapa.classList.contains('ver'),
+    campanas: () => mundo.campanas.lista.map((b) => ({ x: b.x, z: b.z, i: b.i })), ordenCampanas: () => mundo.campanas.orden, tocarCampana: (i) => tocarCampana(mundo.campanas.lista[i]),
+    estatuas: () => mundo.estatuas.lista.map((e) => ({ x: e.x, z: e.z, giros: e.giros, mira: e.mira() })), girarEstatua: (i) => girarEstatua(mundo.estatuas.lista[i]),
+    mariposas: () => mundo.mariposas.map((b) => ({ x: b.grupo.position.x, y: b.grupo.position.y, z: b.grupo.position.z, atrapada: b.atrapada })),
+    balsas: () => mundo.balsas.map((b) => ({ x: b.sup.x, z: b.sup.z, tope: b.sup.tope })),
+    estrellas: () => mundo.escalera.estrellas.map((e) => ({ x: e.sup.x, z: e.sup.z, tope: e.sup.tope })),
+    recuerdos: () => mundo.recuerdos.map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z, tomado: o.tomado })),
     saltarCine: () => { if (cine) cine.t = Math.max(cine.t, cine.dur); },
     salirCielo,
     vista: () => { const d = camara.getWorldDirection(new THREE.Vector3()); return { y: camara.position.y, dy: d.y }; },

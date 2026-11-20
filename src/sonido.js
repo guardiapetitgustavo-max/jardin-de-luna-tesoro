@@ -95,5 +95,33 @@ export const sonidos = {
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200; const g = ctx.createGain(); g.gain.value = 0.25;
     n.buffer = b; n.connect(f); f.connect(g); g.connect(maestro); n.start(t); },
+  piedra: () => { if (!ctx) return; const t = ctx.currentTime, n = ctx.createBufferSource(), b = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((i / d.length) * Math.PI) * (0.6 + 0.4 * Math.sin(i * 0.004));
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; const g = ctx.createGain(); g.gain.value = 0.35;
+    n.buffer = b; n.connect(f); f.connect(g); g.connect(maestro); n.start(t); },
+  mariposa: () => { [1318.5, 1760, 2349.3].forEach((f, i) => nota(f, i * 0.06, 0.7, 0.045)); },
+  recuerdo: () => { [987.77, 1318.5, 1975.5, 2637].forEach((f, i) => nota(f, i * 0.08, 1.2, 0.05)); },
   final: () => { [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98].forEach((f, i) => nota(f, i * 0.16, 2.2, 0.09)); },
+};
+
+// Campana de viento: varios armónicos inarmónicos que se apagan a distinto ritmo (suena a metal).
+export function campana(frecuencia, volumen = 0.09) {
+  [[1, 1, 2.6], [2.0, 0.45, 1.6], [2.76, 0.3, 1.2], [5.4, 0.12, 0.6]].forEach(([m, v, d]) => nota(frecuencia * m, 0, d, volumen * v));
+}
+export const NOTAS_CAMPANAS = [261.63, 329.63, 392.0, 523.25];
+
+// Caja de música: una melodía corta y dulce que se repite mientras se lee la carta y se mira el cielo.
+const MELODIA = [
+  [783.99, 0], [659.25, 0.5], [698.46, 1], [783.99, 1.5], [1046.5, 2], [987.77, 2.75], [880, 3.25],
+  [783.99, 4], [698.46, 4.5], [659.25, 5], [587.33, 5.5], [659.25, 6], [523.25, 6.75],
+];
+const BAJOS = [[261.63, 0], [196, 2], [174.61, 4], [196, 6]];
+let cajaTimer = null;
+function tocarCaja() {
+  for (const [f, t] of MELODIA) { nota(f, t * 0.42, 1.4, 0.05); nota(f * 2, t * 0.42, 0.5, 0.012); }
+  for (const [f, t] of BAJOS) nota(f, t * 0.42, 1.6, 0.03);
+}
+export const cajaMusica = {
+  iniciar() { if (cajaTimer || !ctx) return; tocarCaja(); cajaTimer = setInterval(tocarCaja, 8 * 420); },
+  parar() { clearInterval(cajaTimer); cajaTimer = null; },
 };

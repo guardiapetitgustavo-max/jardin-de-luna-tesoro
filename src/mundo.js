@@ -1,18 +1,24 @@
-// Construye el jardín completo: cinco niveles y el mirador final.
+// Construye el jardín completo: diez niveles y el mirador final.
 // Ejes: +X es hacia adelante en el recorrido, +Y arriba, Z a los lados. Unidades en metros.
 //
-//  Nivel 1  x   0–22  La entrada y las tres puertas
-//  Nivel 2  x  22–38  El estanque (piedras que se mueven y nenúfares que se hunden)
-//  Nivel 3  x  38–70  El laberinto de rosas (tres rosas abren la reja)
-//  Nivel 4  x  70–92  Los cuatro faroles (acertijo de orden) y el puente sobre el barranco
-//  Nivel 5  x  92–110 El bosque de luciérnagas (siete luces abren la cortina)
-//  Final    x 110–120 El mirador y el cofre
+//  Nivel 1   x   0–22   La entrada y las tres puertas
+//  Nivel 2   x  22–38   El estanque (piedras que se mueven y nenúfares que se hunden)
+//  Nivel 3   x  38–70   El laberinto de rosas (tres rosas abren la reja)
+//  Nivel 4   x  70–92   Los cuatro faroles (acertijo de orden) y el puente sobre el barranco
+//  Nivel 5   x  92–110  El bosque de luciérnagas (siete luces abren la cortina)
+//  Nivel 6   x 110–126  El río de las linternas (balsas que van y vienen)
+//  Nivel 7   x 126–143  Las campanas de viento (tocarlas de la más grande a la más pequeña)
+//  Nivel 8   x 143–158  El jardín de las estatuas (girarlas hasta que miren a la luna)
+//  Nivel 9   x 158–175  El invernadero de mariposas (cinco mariposas abren la puerta)
+//  Nivel 10  x 175–191  La escalera de estrellas (subir hasta la meseta)
+//  Final     x 191–204  El mirador y el cofre, en lo alto de la meseta
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { construirNiveles2 } from './niveles2.js';
 
 export const NIVEL_AGUA = -0.35;
-export const LIMITE = { xMin: -3, xMax: 120, z: 9 };
+export const LIMITE = { xMin: -3, xMax: 204, z: 9 };
 export const DIR_LUNA = new THREE.Vector3(0.85, 0.36, 0.42).normalize();
 
 // ------------------------------------------------------------------ Diseño del recorrido
@@ -20,7 +26,7 @@ const LAB = { x0: 41, z0: -8, columnas: 14, filas: 8, celda: 2, filaEntrada: 3, 
 export const DISENO = {
   inicio: { x: 0.5, z: 0, giro: 0 },
   arco: 5,
-  atriles: [{ x: 8, z: -2.4 }, { x: 20, z: 2.5 }, { x: 38.4, z: -2.6 }, { x: 72.6, z: -2.5 }],
+  atriles: [{ x: 8, z: -2.4 }, { x: 20, z: 2.5 }, { x: 38.4, z: -2.6 }, { x: 72.6, z: -2.5 }, { x: 111.8, z: -2.7 }, { x: 129.4, z: 2.8 }, { x: 145.6, z: -2.4 }],
   puertas: { x: 15, lugares: [{ z: -5.5, color: 0x55d6b4, nombre: 'menta' }, { z: 0, color: 0xe57aa6, nombre: 'rosa' }, { z: 5.5, color: 0xf2b252, nombre: 'sol', correcta: true }] },
   // [x, z, desplazamiento lateral (piedra móvil), tipo] — tipo 'n' = nenúfar que se hunde
   piedras: [[23.3, 0], [24.7, 0.35], [26.1, -0.3, 0, 'n'], [27.5, 0.3, 0.55], [28.9, -0.3], [30.3, 0.3], [31.7, -0.2, 0, 'n'], [33.1, 0.2, 0.5], [34.5, -0.2], [35.9, 0]],
@@ -38,10 +44,46 @@ export const DISENO = {
   puente: [[85.6, 0, 0, 0], [87.4, 0, 0.7, 0], [89.3, 0, 0, 0.3], [90.6, 0, 0, 0]],
   luciernagas: [[94.5, -4.2, 1.1], [96.4, 3.6, 1.4], [98.2, -6.4, 1.0], [100.3, 6.2, 1.3], [102.4, -1.8, 1.6], [104.6, 5.1, 0.9], [106.8, -5.6, 1.2]],
   barrera: 109.4,
-  mirador: { x: 114.8, z: 0 },
-  faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 71.3, 83.4, 92.3, 96.8, 101.2, 105.6, 108.6],
-  controles: { puertas: 10.5, estanqueAntes: 21.2, estanqueDespues: 37.2, laberintoSalida: 70.6, barrancoAntes: 83.2, barrancoDespues: 92, mirador: 110.4 },
+  // ---- niveles 6 a 10
+  rio: { x: 119 },
+  // balsas con linterna: [x, z, cuánto van y vienen de lado]
+  balsas: [[116.5, 0, 0], [118.4, 0, 1.4], [120.3, 0, -1.4], [122.1, 0, 0]],
+  campanas: {
+    piedra: { x: 135.5, z: 0 },
+    // tam: tamaño de la campana (la más grande suena más grave)
+    lista: [{ x: 132.6, z: -3.1, tam: 0.8 }, { x: 134.6, z: 3.2, tam: 1.0 }, { x: 136.6, z: -3.2, tam: 0.55 }, { x: 138.4, z: 3.0, tam: 0.68 }],
+    puerta: 142.2,
+  },
+  // estatuas: [x, z, cuartos de vuelta que les faltan para mirar a la luna]
+  estatuas: { lista: [[147, -3.3, 1], [150.5, 3.3, 2], [154, -3.3, 3]], puerta: 157.4 },
+  invernadero: { x0: 160, x1: 172, z: 5.2, alto: 3.4, cumbre: 4.9, puerta: 173.6 },
+  mariposas: [[162.4, -2.1, 1.5], [164.6, 2.3, 1.2], [166.8, -1.4, 1.9], [168.9, 1.9, 1.4], [170.7, -0.7, 1.7]],
+  // escalera de estrellas: [x, z, altura de la estrella]
+  escalera: [[178.8, 0.3, 0.6], [181.1, -0.6, 1.2], [183.4, 0.5, 1.8], [185.6, -0.5, 2.4], [187.7, 0.4, 3.0], [189.6, 0, 3.6]],
+  meseta: { x: 190.6, alto: 4.2 },
+  mirador: { x: 197.5, z: 0 },
+  // un recuerdo escondido en cada nivel (se ven en el cofre al final)
+  recuerdos: [
+    { id: 0, tipo: 'pluma', x: 3.2, z: -3.6 },
+    { id: 1, tipo: 'perla', x: 30.3, z: 0.3, sobrePiedra: true },
+    { id: 2, tipo: 'rosa', laberinto: true },
+    { id: 3, tipo: 'llave', x: 78, z: -4.4 },
+    { id: 4, tipo: 'frasco', x: 101.2, z: 4.6 },
+    { id: 5, tipo: 'linterna', x: 124.2, z: -3.4 },
+    { id: 6, tipo: 'campanita', x: 140.6, z: 3.4 },
+    { id: 7, tipo: 'moneda', x: 155.6, z: 3.2 },
+    { id: 8, tipo: 'ala', x: 166, z: -2.2 },
+    { id: 9, tipo: 'estrellas', x: 189.6, z: 0, alto: 3.6 },
+  ],
+  faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 71.3, 83.4, 92.3, 96.8, 101.2, 105.6, 108.6, 113.3, 124.6, 127.6, 141.4, 144.2, 157.0, 176.2],
+  controles: {
+    puertas: 10.5, estanqueAntes: 21.2, estanqueDespues: 37.2, laberintoSalida: 70.6, barrancoAntes: 83.2, barrancoDespues: 92,
+    rioAntes: 113.8, rioDespues: 123.6, campanas: 127.2, estatuas: 143.4, invernadero: 158.4, escalera: 176.6, mirador: 191.4,
+  },
 };
+// zonas donde no se ponen árboles ni arbustos (para que no tapen los niveles): [x0, x1, |z| máximo]
+const ZONAS_LIBRES = [[113.5, 125, 14], [128, 141.5, 6.5], [144, 156.5, 6.2], [158.5, 173.8, 7.2], [176, 192, 4], [190, 206, 7.5]];
+const enZonaLibre = (x, z) => ZONAS_LIBRES.some(([a, b, m]) => x > a && x < b && Math.abs(z) < m);
 
 // ------------------------------------------------------------------ Terreno
 const suave = (t) => t * t * (3 - 2 * t);
@@ -55,7 +97,12 @@ export function alturaTerreno(x, z) {
   let h = Math.pow(Math.min(lado, 12), 1.35) * 0.09 * (1 + 0.35 * Math.sin(x * 0.31) * Math.cos(z * 0.23));
   h += 0.12 * Math.sin(x * 0.9 + z * 0.6) * Math.min(1, lado / 2);
   h += Math.pow(Math.max(0, az - 14), 1.45) * 0.08 * (0.8 + 0.2 * Math.sin(x * 0.07 + z * 0.05));
-  h += Math.pow(Math.max(0, -5 - x), 1.4) * 0.12 + Math.pow(Math.max(0, x - 122), 1.4) * 0.14;
+  h += Math.pow(Math.max(0, -5 - x), 1.4) * 0.12 + Math.pow(Math.max(0, x - 206), 1.4) * 0.14;
+  // río de las linternas: un cauce que cruza todo el valle
+  const enRio = 1 - paso(3.2, 4.0, Math.abs(x - DISENO.rio.x));
+  h -= 1.6 * enRio;
+  // meseta del mirador con un acantilado que solo se sube por la escalera de estrellas
+  h += DISENO.meseta.alto * paso(189.9, 190.6, x);
   const dx = Math.max(0, Math.abs(x - 29.6) - 5.6), dz = Math.max(0, az - 9.5);
   const hondo = Math.max(0, 1 - Math.hypot(dx, dz) / 2.2);
   h -= 0.95 * suave(hondo);
@@ -70,7 +117,7 @@ const enLaberinto = (x, z) => x > LAB.x0 - 0.5 && x < LAB.x0 + LAB.columnas * LA
 const SENDERO = [
   [-4, 0, 11, 0], [11, 0, 15, -5.5], [11, 0, 15, 0], [11, 0, 15, 5.5],
   [15, -5.5, 19, 0], [15, 0, 19, 0], [15, 5.5, 19, 0], [19, 0, 22.6, 0],
-  [36.4, 0, 41, -1], [69, 1, 84.4, 0], [91.2, 0, 110.9, 0],
+  [36.4, 0, 41, -1], [69, 1, 84.4, 0], [91.2, 0, 115.2, 0], [122.8, 0, 177.5, 0], [190.6, 0, 193, 0],
 ];
 export function distSendero(x, z) {
   let m = Infinity;
@@ -128,7 +175,9 @@ function generarLaberinto() {
     if (rosas.every((o) => Math.abs(o.i - c.i) + Math.abs(o.j - c.j) > 5)) rosas.push(c);
     if (rosas.length === 3) break;
   }
-  return { pasa, id, rosas, dist };
+  // un rincón más, lejos de las rosas, para el recuerdo del laberinto
+  const recuerdo = callejones.find((c) => rosas.every((o) => Math.abs(o.i - c.i) + Math.abs(o.j - c.j) > 3)) || callejones[callejones.length - 1];
+  return { pasa, id, rosas, dist, recuerdo };
 }
 
 // ------------------------------------------------------------------ Texturas realistas (triplanar: no necesitan UV)
@@ -231,7 +280,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   const superficies = [];
   const candidatasLuz = [];
   const laberinto = generarLaberinto();
-  const ayuda = { estanque: false, puente: false };
+  const ayuda = { estanque: false, puente: false, rio: false, escalera: false };
 
   const piezasCache = new Map();
   function piezas(nombre) {
@@ -275,19 +324,26 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
 
   // Instancias repartidas en tramos de 24 m para que la cámara y la sombra descarten lo que no ven.
   const tmpV = new THREE.Vector3();
-  function porTramos(matrices) {
+  function porTramos(matrices, tam = 30) {
     const tramos = new Map();
     for (const m of matrices) {
       tmpV.setFromMatrixPosition(m);
-      const k = Math.floor(tmpV.x / 30) + ',' + Math.floor(tmpV.z / 30);
+      const k = Math.floor(tmpV.x / tam) + ',' + Math.floor(tmpV.z / tam);
       if (!tramos.has(k)) tramos.set(k, []);
       tramos.get(k).push(m);
     }
     return [...tramos.values()];
   }
+  // Nivel de detalle: los modelos realistas solo se dibujan cerca; lejos (entre la niebla) van versiones livianas.
+  const lods = [], DIST_LOD = 30;
+  const TRAMO_LOD = 12;
+  function centroTramo(lista) {
+    tmpV.setFromMatrixPosition(lista[0]);
+    return new THREE.Vector2((Math.floor(tmpV.x / TRAMO_LOD) + 0.5) * TRAMO_LOD, (Math.floor(tmpV.z / TRAMO_LOD) + 0.5) * TRAMO_LOD);
+  }
   function instanciar(nombre, matrices, opc = {}) {
     const g = new THREE.Group();
-    for (const grupo of porTramos(matrices)) {
+    for (const grupo of porTramos(matrices, opc.lod ? TRAMO_LOD : 30)) {
       for (const p of piezas(nombre)) {
         const im = new THREE.InstancedMesh(p.geometria, mat(p.material, opc.mats, p.original), grupo.length);
         grupo.forEach((m, i) => im.setMatrixAt(i, m));
@@ -295,6 +351,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
         im.name = nombre;
         if (opc.reflejo === false) im.layers.set(1); // detalles pequeños: el reflejo del estanque no los dibuja
         if (opc.soloReflejo) im.layers.set(2); // versión liviana que solo aparece reflejada en el agua
+        if (opc.lod) { im.userData.lod = opc.lod; im.userData.centro = centroTramo(grupo); lods.push(im); }
         im.computeBoundingSphere();
         g.add(im);
       }
@@ -345,9 +402,9 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   escena.background = lineal(0.045, 0.065, 0.11);
 
   const luna = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaLuna(), color: lineal(2.6, 2.6, 2.5), fog: false, depthWrite: false }));
-  luna.scale.setScalar(26 * 95 / 330); luna.renderOrder = -9; // misma luna, pero dentro de la distancia de dibujo (105 m)
+  luna.scale.setScalar(26 * 76 / 330); luna.renderOrder = -9; // misma luna, pero dentro de la distancia de dibujo (82–92 m)
   const haloLuna = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: lineal(0.35, 0.42, 0.62), fog: false, depthWrite: false, blending: THREE.AdditiveBlending, transparent: true }));
-  haloLuna.scale.setScalar(150 * 95 / 330); haloLuna.renderOrder = -8;
+  haloLuna.scale.setScalar(150 * 76 / 330); haloLuna.renderOrder = -8;
   escena.add(luna, haloLuna);
 
   // ================================================================ Luces
@@ -364,10 +421,10 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
 
   // ================================================================ Terreno
   {
-    const ancho = 150, largo = 120, sx = alta ? 240 : 170, sz = alta ? 190 : 135;
+    const ancho = 236, largo = 120, sx = alta ? 380 : 260, sz = alta ? 190 : 135;
     const g = new THREE.PlaneGeometry(ancho, largo, sx, sz);
     g.rotateX(-Math.PI / 2);
-    g.translate(58, 0, 0);
+    g.translate(100, 0, 0);
     const pos = g.attributes.position, colores = new Float32Array(pos.count * 3), mezcla = new Float32Array(pos.count * 3), r = azar(3);
     const cPasto = new THREE.Color(0x23402b), cPasto2 = new THREE.Color(0x2f4f2c), cTierra = new THREE.Color(0x5a4a3a), cGrava = new THREE.Color(0x6a6052),
       cLodo = new THREE.Color(0x1b2723), cColina = new THREE.Color(0x1f3a35), cRoca = new THREE.Color(0x3b3a3c);
@@ -465,7 +522,8 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       const largo = Math.hypot(bx - ax, bz - az), n = Math.floor(largo / 0.95);
       for (let i = 0; i < n; i++) {
         const t = (i + 0.5) / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-        if (x < -2.5 || Math.abs(x - DISENO.barranco.centro) < 3.6) continue;
+        if (x < -2.5 || Math.abs(x - DISENO.barranco.centro) < 3.6 || Math.abs(x - DISENO.rio.x) < 3.9) continue;
+        if (x > DISENO.invernadero.x0 - 0.3 && x < DISENO.invernadero.x1 + 0.3) continue;
         if (Math.hypot(x - DISENO.plaza.x, z - DISENO.plaza.z) < 4.4) continue;
         const ang = Math.atan2(bz - az, bx - ax), lado = (i % 2 ? 1 : -1) * 0.38;
         const px = x + Math.sin(ang) * lado, pz = z + Math.cos(ang) * lado;
@@ -478,13 +536,13 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   // ================================================================ Faroles y guirnaldas
   const faroles = [], ALTO_FAROL = REAL ? 2.62 : 1.66;
   for (const x of DISENO.faroles) for (const s of [-1, 1]) {
-    const z = s * (2.45 + (x > 21 && x < 38 ? 0.4 : 0) + (x > 70 && x < 84 ? 0.6 : 0)), y = alturaTerreno(x, z);
+    const z = s * (2.45 + (x > 21 && x < 38 ? 0.4 : 0) + (x > 70 && x < 84 ? 0.6 : 0) + (x > 140 && x < 145 ? 1.2 : 0)), y = alturaTerreno(x, z);
     faroles.push(matriz(x, y, z, s * 0.4));
     colisiones.push({ tipo: 'c', x, z, r: 0.22, tope: 9 });
     candidatasLuz.push({ pos: new THREE.Vector3(x, y + ALTO_FAROL, z), color: new THREE.Color(0xffb36a), fuerza: REAL ? 8 : 5.5 });
   }
-  instanciar(REAL ? 'SM_FarolReal' : 'SM_Farol', faroles);
-  if (REAL) instanciar('SM_Farol', faroles, { sombra: false, soloReflejo: true });
+  instanciar(REAL ? 'SM_FarolReal' : 'SM_Farol', faroles, REAL ? { lod: 'cerca' } : {});
+  if (REAL) { instanciar('SM_Farol', faroles, { sombra: false, soloReflejo: true }); instanciar('SM_Farol', faroles, { sombra: false, lod: 'lejos', reflejo: false }); }
   {
     const matHalo = new THREE.SpriteMaterial({ map: halo, color: lineal(0.55, 0.32, 0.14), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const p = new THREE.Vector3();
@@ -888,10 +946,10 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     const r = azar(21), a1 = [], a2 = [], lejanos1 = [], lejanos2 = [], arb = [], flo = [], roc = [], hongos = [];
     const libre = (x, z, minS) => distSendero(x, z) > minS && !(x > 20.5 && x < 38.6 && Math.abs(z) < 12.5)
       && Math.hypot(x - DISENO.mirador.x, z) > 6 && !(x > LAB.x0 - 1.5 && x < LAB.x0 + LAB.columnas * LAB.celda + 1.5 && Math.abs(z) < 10.5)
-      && Math.abs(x - B.centro) > 4.2 && Math.hypot(x - P.x, z - P.z) > 7;
-    const total = alta ? 330 : 200;
+      && Math.abs(x - B.centro) > 4.2 && Math.hypot(x - P.x, z - P.z) > 7 && !enZonaLibre(x, z);
+    const total = alta ? 500 : 300;
     for (let i = 0; i < total * 5 && a1.length + a2.length + lejanos1.length + lejanos2.length < total; i++) {
-      const x = -14 + r() * 150, z = (r() < 0.5 ? -1 : 1) * (4.6 + Math.pow(r(), 0.8) * 42);
+      const x = -14 + r() * 230, z = (r() < 0.5 ? -1 : 1) * (4.6 + Math.pow(r(), 0.8) * 42);
       if (!libre(x, z, 3.2)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 2 && Math.abs(z) < 13) continue;
       if (Math.abs(x - DISENO.arco) < 1.5 && Math.abs(z) < 10.5) continue;
@@ -904,30 +962,30 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (REAL) {
       // jacarandás realistas cerca del camino; los lejanos (entre la niebla) siguen siendo livianos
       const cerca = [], lejos1 = [], lejos2 = [], p = new THREE.Vector3();
-      const limite = alta ? 85 : 50;
+      const limite = alta ? 130 : 75;
       for (const [lista, dest] of [[a1, lejos1], [a2, lejos2]]) for (const m of lista) {
         p.setFromMatrixPosition(m);
         if (Math.abs(p.z) < 15 && cerca.length < limite) cerca.push(m.clone().multiply(new THREE.Matrix4().makeScale(0.8, 0.8, 0.8))); else dest.push(m);
       }
-      instanciar('SM_ArbolReal', cerca); instanciar('SM_Arbol1', cerca, { sombra: false, soloReflejo: true }); instanciar('SM_Arbol1', [...lejos1, ...lejanos1], { sombra: false }); instanciar('SM_Arbol2', [...lejos2, ...lejanos2], { sombra: false });
+      instanciar('SM_ArbolReal', cerca, { lod: 'cerca' }); instanciar('SM_Arbol1', cerca, { sombra: false, soloReflejo: true }); instanciar('SM_Arbol1', cerca, { sombra: false, lod: 'lejos', reflejo: false }); instanciar('SM_Arbol1', [...lejos1, ...lejanos1], { sombra: false }); instanciar('SM_Arbol2', [...lejos2, ...lejanos2], { sombra: false });
     } else { instanciar('SM_Arbol1', a1); instanciar('SM_Arbol2', a2); instanciar('SM_Arbol1', lejanos1, { sombra: false }); instanciar('SM_Arbol2', lejanos2, { sombra: false }); }
-    for (let i = 0; i < 2000 && arb.length < (alta ? 120 : 80); i++) {
-      const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
+    for (let i = 0; i < 3500 && arb.length < (alta ? 190 : 125); i++) {
+      const x = -3 + r() * 206, z = (r() < 0.5 ? -1 : 1) * (2.9 + r() * 9);
       if (!libre(x, z, 1.9)) continue;
       if (Math.abs(x - DISENO.puertas.x) < 1.3 && Math.abs(z) < 12) continue;
       arb.push(matriz(x, alturaTerreno(x, z) - 0.05, z, r() * 6, 0.8 + r() * 0.6));
     }
     instanciar(REAL ? 'SM_BolaSeto' : 'SM_Arbusto', arb, { sombra: false, reflejo: false });
-    for (let i = 0; i < 4000 && flo.length < (alta ? 220 : 130); i++) {
-      const x = -3 + r() * 122, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
+    for (let i = 0; i < 7000 && flo.length < (alta ? 350 : 200); i++) {
+      const x = -3 + r() * 206, z = (r() < 0.5 ? -1 : 1) * (1.6 + r() * 10);
       if (!libre(x, z, 1.4)) continue;
       flo.push(matriz(x, alturaTerreno(x, z) - 0.02, z, r() * 6, 0.8 + r() * 0.7));
     }
     if (REAL) {
       ['SM_Vinca0', 'SM_Vinca1', 'SM_Vinca2', 'SM_Trebol0', 'SM_Trebol1', 'SM_Helecho0', 'SM_Helecho1'].forEach((n, k) => instanciar(n, flo.filter((_, i) => i % 7 === k).map((m) => m.clone().multiply(new THREE.Matrix4().makeScale(n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1, n.includes('Trebol') ? 2.4 : 1))), { sombra: false, reflejo: false }));
     } else instanciar('SM_Flores', flo, { sombra: false, reflejo: false });
-    for (let i = 0; i < 800 && roc.length < 70; i++) {
-      const x = -6 + r() * 130, z = (r() < 0.5 ? -1 : 1) * (3.5 + r() * 18);
+    for (let i = 0; i < 1400 && roc.length < 110; i++) {
+      const x = -6 + r() * 212, z = (r() < 0.5 ? -1 : 1) * (3.5 + r() * 18);
       if (!libre(x, z, 2.2)) continue;
       roc.push(matriz(x, alturaTerreno(x, z) - 0.15, z, r() * 6, 0.4 + r() * 1.2));
     }
@@ -983,18 +1041,20 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
       s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAlto;')
         .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(.28, 1.15, vAlto);');
     };
-    const n = alta ? 36000 : 14000, r = azar(33);
+    const n = alta ? 58000 : 22000, r = azar(33);
     const c1 = new THREE.Color(0x3d6b3a), c2 = new THREE.Color(0x5a7f45), c3 = new THREE.Color(0x2f5a45);
     const tramos = new Map();
     let k = 0;
     for (let i = 0; i < n * 3 && k < n; i++) {
       const cerca = r() < 0.75;
-      const x = -4 + r() * 126, z = (r() < 0.5 ? -1 : 1) * (cerca ? 1.1 + r() * 9 : 9 + r() * 12);
+      const x = -4 + r() * 210, z = (r() < 0.5 ? -1 : 1) * (cerca ? 1.1 + r() * 9 : 9 + r() * 12);
       const ds = distSendero(x, z);
       if (ds < 1.05 + r() * 0.5) continue;
       const y = alturaTerreno(x, z);
       if (y < NIVEL_AGUA + 0.08) continue;
       if (Math.hypot(x - DISENO.mirador.x, z) < 4.4) continue;
+      if (x > DISENO.invernadero.x0 - 0.2 && x < DISENO.invernadero.x1 + 0.2 && Math.abs(z) < DISENO.invernadero.z + 0.2) continue;
+      if (x > 177.5 && x < 190.8 && Math.abs(z) < 3) continue;
       const alto = (0.22 + r() * 0.3) * (ds < 2.2 ? 0.7 : 1) * (Math.abs(z) > 9 ? 1.35 : 1);
       const clave = Math.floor(x / 20);
       if (!tramos.has(clave)) tramos.set(clave, []);
@@ -1036,9 +1096,9 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     }
   });
   {
-    const n = alta ? 520 : 220, r = azar(77), pos = new Float32Array(n * 3), fase = new Float32Array(n);
+    const n = alta ? 820 : 340, r = azar(77), pos = new Float32Array(n * 3), fase = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      const x = -4 + r() * 124, z = (r() - 0.5) * 30;
+      const x = -4 + r() * 208, z = (r() - 0.5) * 30;
       pos.set([x, Math.max(alturaTerreno(x, z), -1.5) + 0.3 + r() * 2.6, z], i * 3); fase[i] = r() * 100;
     }
     const g = new THREE.BufferGeometry();
@@ -1060,6 +1120,10 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     actualizables.push(() => { uLuc.escalaPx.value = innerHeight / 2; });
   }
   const barrera = crearCortina(DISENO.barrera, 0, 20, 4.2, lineal(1.4, 0.95, 0.4));
+
+  // ================================================================ Niveles 6 a 10, recuerdos y la estrella de Kimberly (niveles2.js)
+  const nuevos = construirNiveles2({ escena, DISENO, alturaTerreno, NIVEL_AGUA, REAL, alta, colocar, instanciar, mat, sprite, lineal, azar, matriz,
+    colisiones, superficies, candidatasLuz, actualizables, crearCortina, rocasReales, ayuda, LAB, laberinto, DIR_LUNA });
 
   // ================================================================ Final: mirador y cofre
   const M = DISENO.mirador, yM = Math.max(0, alturaTerreno(M.x, M.z));
@@ -1282,9 +1346,13 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   function actualizar(t, dt, camara, foco, jugador) {
     uCielo.tiempo.value = t; uAgua.tiempo.value = t; uPasto.tiempo.value = t;
     agua.visible = !agua.userData.apagado && camara.position.x > 4 && camara.position.x < 56;
-    luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 95);
+    luna.position.copy(camara.position).addScaledVector(DIR_LUNA, 76);
     haloLuna.position.copy(luna.position);
     for (const f of actualizables) f({ t, dt, camara, jugador });
+    for (const im of lods) {
+      const d = Math.hypot(im.userData.centro.x - camara.position.x, im.userData.centro.y - camara.position.z);
+      im.visible = (d < DIST_LOD) === (im.userData.lod === 'cerca');
+    }
     luzLuna.target.position.copy(foco);
     luzLuna.position.copy(foco).addScaledVector(DIR_LUNA, 70);
     reloj -= dt;
@@ -1309,7 +1377,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   function alturaSuelo(x, z, y) {
     let h = alturaTerreno(x, z), sobre = null;
     for (const s of superficies) {
-      const margen = s.piedra || s.nenufar || s.puente ? 0.22 : 0;
+      const margen = s.piedra || s.nenufar || s.puente || s.balsa || s.estrella ? 0.22 : 0;
       const dentro = s.tipo === 'c' ? Math.hypot(x - s.x, z - s.z) < s.r + margen : Math.abs(x - s.x) < s.hx && Math.abs(z - s.z) < s.hz;
       if (dentro && s.tope <= y + 0.4 && s.tope > h) { h = s.tope; sobre = s; }
     }
@@ -1341,7 +1409,7 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     }
     p.x = Math.min(LIMITE.xMax, Math.max(LIMITE.xMin, p.x));
     p.z = Math.min(LIMITE.z, Math.max(-LIMITE.z, p.z));
-    if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
+    if (p.x > DISENO.meseta.x) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
   // El agua solo refleja lo que de verdad se ve en ella (cielo, luna, árboles, faroles, arcos, luces y la protagonista):
@@ -1356,5 +1424,5 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (ok) o.layers.enable(2);
   });
 
-  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
+  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto }, ...nuevos };
 }

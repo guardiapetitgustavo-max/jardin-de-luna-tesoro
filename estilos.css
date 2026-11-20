@@ -54,6 +54,7 @@ h1 { font: 600 clamp(44px, 9vw, 92px)/.95 var(--serif); margin: 14px 0 10px; let
 .icono.pista { background: #f2c27a; box-shadow: 0 0 10px #f2c27a; }
 .icono.rosa { background: #ff7eb3; box-shadow: 0 0 10px #ff5fa0; }
 .icono.luc { background: #fff1a0; box-shadow: 0 0 12px 2px #ffe66b; }
+.icono.rec { background: #b7d8ff; box-shadow: 0 0 12px 2px #8fc3ff; }
 .redondo { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; width: 48px; height: 48px; padding: 0; background: var(--vidrio); border: 1px solid var(--borde); color: var(--crema); font-size: 13px; backdrop-filter: blur(10px); }
 #btnSonido { right: 74px; font-size: 18px; }
 #mapa { position: absolute; right: 16px; top: 92px; border-radius: 16px; background: rgba(8, 16, 24, .72); border: 1px solid var(--borde); backdrop-filter: blur(8px); opacity: 0; transform: translateY(-6px); transition: opacity .4s, transform .4s; pointer-events: none !important; }
@@ -129,3 +130,12 @@ body.foto #barraFoto { display: flex; }
 .carta { text-align: left; font: 500 clamp(19px, 2.6vw, 23px)/1.5 var(--serif); color: #fff1dc; min-height: 260px; margin-bottom: 22px; }
 .carta p { margin: 0 0 12px; }
 .carta .firma { text-align: right; font-style: italic; color: var(--oro); margin-top: 18px; }
+.recuerdos { list-style: none; padding: 0; margin: 0 0 20px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.recuerdos li { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 9px 12px; border-radius: 12px; background: rgba(255, 236, 205, .07); border: 1px solid rgba(242, 194, 122, .35); animation: aparece .5s ease both; }
+.recuerdos .ico { grid-row: span 2; font-size: 26px; text-align: center; filter: drop-shadow(0 0 8px rgba(255, 210, 140, .6)); }
+.recuerdos b { font: 600 18px/1.1 var(--serif); color: #ffe2ae; }
+.recuerdos small { font: 400 12.5px/1.25 var(--sans); color: #e3d8c9; }
+.recuerdos li.falta { opacity: .45; border-style: dashed; }
+.recuerdos li.falta .ico { font: 700 20px var(--serif); color: #e3d8c9; filter: none; }
+@media (max-width: 520px) { .recuerdos { grid-template-columns: 1fr; } }
+#dedicatoriaFinal .estrella { margin: 14px 0 0; font: 600 13px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: #f2c27a; }

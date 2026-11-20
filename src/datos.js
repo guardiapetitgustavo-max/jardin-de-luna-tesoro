@@ -12,6 +12,9 @@ export const PISTAS = [
   { titulo: 'El estanque', texto: 'La luna dejó escalones en el agua. Salta sobre ellos, pero no te quedes quieta en los nenúfares grandes: se hunden.' },
   { titulo: 'El laberinto de rosas', texto: 'Tres rosas de luz se esconden en los rincones del laberinto. Llévalas a la reja del otro lado y se abrirá.' },
   { titulo: 'Los cuatro faroles', texto: 'Pisa las losas para encender los faroles: primero el color del mar en calma, luego el del sol, después el de las rosas y al final el de la noche. Así aparecerá el puente.' },
+  { titulo: 'El río de las linternas', texto: 'Las balsas van y vienen con la corriente. Espera a que se acerquen y salta: el río no tiene prisa.' },
+  { titulo: 'Las campanas de viento', texto: 'Toca las campanas como sube la luna: de la más grande a la más pequeña. Si olvidas la canción, la piedra del centro te la canta.' },
+  { titulo: 'Las estatuas', texto: 'Las tres estatuas perdieron de vista a la luna. Gíralas hasta que las tres la miren y sus linternas se enciendan.' },
 ];
 
 /** Niveles según la posición X (metros) del recorrido. */
@@ -21,11 +24,31 @@ export const NIVELES = [
   { desde: 39, numero: 3, nombre: 'El laberinto de rosas' },
   { desde: 70.5, numero: 4, nombre: 'Los cuatro faroles' },
   { desde: 92, numero: 5, nombre: 'El bosque de luciérnagas' },
-  { desde: 110.5, numero: 6, nombre: 'El mirador', final: true },
+  { desde: 110.5, numero: 6, nombre: 'El río de las linternas' },
+  { desde: 126, numero: 7, nombre: 'Las campanas de viento' },
+  { desde: 143, numero: 8, nombre: 'El jardín de las estatuas' },
+  { desde: 158.2, numero: 9, nombre: 'El invernadero de mariposas' },
+  { desde: 174.8, numero: 10, nombre: 'La escalera de estrellas' },
+  { desde: 190.7, numero: 11, nombre: 'El mirador', final: true },
+];
+export const MARIPOSAS_NECESARIAS = 5;
+
+// Un recuerdo escondido en cada nivel. Se ven todos juntos al abrir el cofre.
+export const RECUERDOS = [
+  { nombre: 'Pluma de búho', icono: '🪶', texto: 'Del búho que te cuidó desde la entrada.' },
+  { nombre: 'Perla del estanque', icono: '🦪', texto: 'La luna la dejó sobre una piedra.' },
+  { nombre: 'Rosa de luz', icono: '🌹', texto: 'La cuarta rosa, la que nadie encuentra.' },
+  { nombre: 'Llave de farol', icono: '🗝️', texto: 'Abre cualquier noche oscura.' },
+  { nombre: 'Frasco de luz', icono: '✨', texto: 'Luz de luciérnaga para los días grises.' },
+  { nombre: 'Linterna de papel', icono: '🏮', texto: 'Para pedir un deseo junto al río.' },
+  { nombre: 'Campanita', icono: '🔔', texto: 'Suena cuando alguien piensa en ti.' },
+  { nombre: 'Moneda de luna', icono: '🌕', texto: 'Para pagar una sonrisa.' },
+  { nombre: 'Ala de mariposa', icono: '🦋', texto: 'Para que nunca te falte vuelo.' },
+  { nombre: 'Polvo de estrellas', icono: '⭐', texto: 'El último escalón antes del cielo.' },
 ];
 export const nivelEn = (x) => [...NIVELES].reverse().find((n) => x >= n.desde);
 
-export const BIENVENIDA = `Hice este jardín para ti. Son cinco niveles: lee las pistas, cruza el estanque, encuentra las rosas del laberinto, enciende los faroles en orden y sigue a las luciérnagas hasta el mirador. Allí te espera algo.`;
+export const BIENVENIDA = `Hice este jardín para ti. Son diez niveles: puertas, un estanque, un laberinto, faroles, luciérnagas, un río, campanas, estatuas, un invernadero de mariposas y una escalera de estrellas. En cada nivel hay un recuerdo escondido que brilla; guárdalos todos. Al final, en el mirador, te espera un cofre.`;
 
 export const CONTROLES = [
   ['W A S D / flechas', 'Caminar'],
@@ -46,9 +69,9 @@ export const CONTROLES_TACTILES = [
 // Carta del final (se escribe letra por letra). Cámbiala por tus propias palabras.
 export const CARTA = [
   'Kimberly:',
-  'Si estás leyendo esto, cruzaste puertas, piedras, un laberinto y un barranco solo para llegar hasta aquí.',
+  'Si estás leyendo esto, cruzaste puertas, piedras, un laberinto, un barranco, un río y una escalera de estrellas solo para llegar hasta aquí.',
   'Este jardín lo hice pensando en ti: en lo bonito que es compartir una noche tranquila, una risa o un paseo sin prisa.',
-  'Dentro del cofre hay seis planes para los dos. Elige el que quieras primero, que yo me encargo del resto.',
+  'Dentro del cofre están los recuerdos que fuiste juntando y diez planes para los dos, uno por cada nivel. Elige el que quieras primero, que yo me encargo del resto.',
   'Gracias por jugar hasta el final.',
 ];
 export const FIRMA = 'Con cariño, Gustavo';
@@ -59,5 +82,9 @@ export const CUPONES = [
   ['Postre sorpresa', 'Yo lo preparo'],
   ['Noche de juegos', 'Tú eliges qué jugamos'],
   ['Paseo juntos', 'Tú eliges el lugar'],
+  ['Desayuno sorpresa', 'Yo lo llevo'],
+  ['Picnic bajo las estrellas', 'Yo llevo la manta'],
+  ['Una canción para ti', 'Tú eliges cuál'],
+  ['Día de fotos', 'Tú eres la protagonista'],
   ['Comodín', 'Un plan a tu elección'],
 ];
