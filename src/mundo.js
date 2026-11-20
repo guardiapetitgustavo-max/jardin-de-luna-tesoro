@@ -1100,6 +1100,94 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     luzCofre.fuerza = 2 + e * 14;
   });
 
+  // ================================================================ Celebración final: farolillos, fuegos artificiales y un corazón de luz
+  const fiesta = { activa: false, t: 0 };
+  {
+    // farolillos de papel que suben al cielo
+    const n = alta ? 70 : 40, r = azar(2024);
+    const geo = new THREE.CylinderGeometry(0.16, 0.12, 0.34, 10, 1, true);
+    const matF = new THREE.MeshBasicMaterial({ color: lineal(2.6, 1.15, 0.38), side: THREE.DoubleSide, transparent: true, opacity: 0.95, fog: false });
+    const farolillos = new THREE.InstancedMesh(geo, matF, n);
+    farolillos.frustumCulled = false; farolillos.visible = false;
+    const datos = [];
+    for (let i = 0; i < n; i++) datos.push({ x: M.x + (r() - 0.5) * 30, z: M.z + (r() - 0.5) * 30, y0: yM + 0.5 + r() * 2, v: 0.55 + r() * 0.5, f: r() * 6, retraso: r() * 10 });
+    escena.add(farolillos);
+    // fuegos artificiales: varias explosiones de partículas sobre el mirador
+    const nP = 900, posF = new Float32Array(nP * 3), velF = new Float32Array(nP * 3), colF = new Float32Array(nP * 3), edadF = new Float32Array(nP).fill(99);
+    const gF = new THREE.BufferGeometry();
+    gF.setAttribute('position', new THREE.BufferAttribute(posF, 3));
+    gF.setAttribute('color', new THREE.BufferAttribute(colF, 3));
+    gF.setAttribute('edad', new THREE.BufferAttribute(edadF, 1));
+    const fuegos = new THREE.Points(gF, new THREE.ShaderMaterial({
+      uniforms: { mapa: { value: halo } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
+      vertexShader: `attribute float edad; varying vec3 vC; varying float vA;
+        void main(){ vC = color; vA = clamp(1. - edad / 2.2, 0., 1.); vec4 mv = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mv; gl_PointSize = min(380. / -mv.z, 14.) * (.6 + vA * .6); }`,
+      fragmentShader: `uniform sampler2D mapa; varying vec3 vC; varying float vA; void main(){ float a = texture2D(mapa, gl_PointCoord).r; gl_FragColor = vec4(vC * a * vA * 2.2, 1.); }`,
+    }));
+    fuegos.frustumCulled = false; fuegos.visible = false;
+    escena.add(fuegos);
+    let cursor = 0, proximo = 0;
+    const colores = [[1, 0.45, 0.7], [1, 0.8, 0.35], [0.6, 0.8, 1], [0.8, 0.55, 1], [0.5, 1, 0.75]];
+    const estallar = () => {
+      const cx = M.x + 8 + (r() - 0.5) * 16, cy = 14 + r() * 8, cz = M.z + (r() - 0.5) * 22, c = colores[Math.floor(r() * colores.length)];
+      for (let k = 0; k < 150; k++) {
+        const i = cursor; cursor = (cursor + 1) % nP;
+        const th = r() * Math.PI * 2, ph = Math.acos(2 * r() - 1), v = 5 + r() * 2.5;
+        posF.set([cx, cy, cz], i * 3);
+        velF.set([Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v, Math.sin(ph) * Math.sin(th) * v], i * 3);
+        colF.set(c, i * 3); edadF[i] = 0;
+      }
+    };
+    // corazón de luz formado por luciérnagas
+    const nC = 90, posC = new Float32Array(nC * 3), destinoC = [];
+    for (let i = 0; i < nC; i++) {
+      const t = (i / nC) * Math.PI * 2;
+      const hx = 16 * Math.pow(Math.sin(t), 3), hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      destinoC.push(new THREE.Vector3(M.x + 1.5, yM + 6.5 + hy * 0.13, M.z + hx * 0.13));
+      posC.set([M.x + (r() - 0.5) * 20, yM + r() * 4, M.z + (r() - 0.5) * 20], i * 3);
+    }
+    const gC = new THREE.BufferGeometry(); gC.setAttribute('position', new THREE.BufferAttribute(posC, 3));
+    const corazon = new THREE.Points(gC, new THREE.PointsMaterial({ map: halo, size: 0.55, color: lineal(2.4, 2, 0.6), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+    corazon.frustumCulled = false; corazon.visible = false;
+    escena.add(corazon);
+    const luzFiesta = new THREE.PointLight(0xffc27a, 0, 30, 1.5);
+    luzFiesta.position.set(M.x + 2, yM + 8, M.z);
+    escena.add(luzFiesta);
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), v3 = new THREE.Vector3(), uno = new THREE.Vector3(1, 1, 1);
+    actualizables.push(({ dt }) => {
+      if (!fiesta.activa) return;
+      fiesta.t += dt;
+      const t = fiesta.t;
+      farolillos.visible = fuegos.visible = corazon.visible = true;
+      datos.forEach((d, i) => {
+        const tt = Math.max(0, t - d.retraso);
+        v3.set(d.x + Math.sin(tt * 0.5 + d.f) * 0.6, d.y0 + tt * d.v, d.z + Math.cos(tt * 0.4 + d.f) * 0.6);
+        mtx.compose(v3, q, tt > 0 ? uno : v3.clone().set(0.001, 0.001, 0.001));
+        farolillos.setMatrixAt(i, mtx);
+      });
+      farolillos.instanceMatrix.needsUpdate = true;
+      if (t < 30) { proximo -= dt; if (proximo <= 0) { estallar(); proximo = 0.7 + r() * 0.9; } }
+      for (let i = 0; i < nP; i++) {
+        if (edadF[i] > 3) continue;
+        edadF[i] += dt;
+        velF[i * 3 + 1] -= 4 * dt;
+        for (let k = 0; k < 3; k++) { velF[i * 3 + k] *= 1 - dt * 0.9; posF[i * 3 + k] += velF[i * 3 + k] * dt; }
+      }
+      gF.attributes.position.needsUpdate = gF.attributes.edad.needsUpdate = gF.attributes.color.needsUpdate = true;
+      const atraccion = Math.min(1, Math.max(0, (t - 2) / 4));
+      for (let i = 0; i < nC; i++) {
+        const d = destinoC[i];
+        posC[i * 3] += (d.x - posC[i * 3]) * dt * 1.4 * atraccion + Math.sin(t * 3 + i) * 0.003;
+        posC[i * 3 + 1] += (d.y + Math.sin(t * 2 + i * 0.3) * 0.05 - posC[i * 3 + 1]) * dt * 1.4 * atraccion;
+        posC[i * 3 + 2] += (d.z - posC[i * 3 + 2]) * dt * 1.4 * atraccion;
+      }
+      gC.attributes.position.needsUpdate = true;
+      corazon.material.size = 0.5 + Math.sin(t * 2.4) * 0.08;
+      luzFiesta.intensity = 6 + Math.sin(t * 5) * 1.5;
+    });
+  }
+  const celebrar = () => { fiesta.activa = true; fiesta.t = 0; };
+
   // ================================================================ Bucle
   let reloj = 0;
   function actualizar(t, dt, camara, foco, jugador) {
@@ -1166,5 +1254,5 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
-  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
+  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

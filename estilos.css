@@ -109,3 +109,9 @@ dialog .suave { color: #d6cec2; font-size: 15px; }
 .cupones li small { display: block; font: 400 13px var(--sans); color: #e3d8c9; margin-top: 4px; }
 .cupones li::after { content: ""; position: absolute; right: -7px; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%; background: #121c25; border-left: 1px dashed rgba(242, 194, 122, .7); }
 @media (max-width: 460px) { .cupones { grid-template-columns: 1fr; } }
+
+/* Final */
+#hud.cine > *:not(#aviso) { visibility: hidden; }
+.carta { text-align: left; font: 500 clamp(19px, 2.6vw, 23px)/1.5 var(--serif); color: #fff1dc; min-height: 260px; margin-bottom: 22px; }
+.carta p { margin: 0 0 12px; }
+.carta .firma { text-align: right; font-style: italic; color: var(--oro); margin-top: 18px; }

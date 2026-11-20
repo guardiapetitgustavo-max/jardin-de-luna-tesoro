@@ -68,7 +68,8 @@ let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
 const pistasLeidas = () => estado.pistas.filter(Boolean).length;
-const puedeAbrir = () => pistasLeidas() === D.PISTAS.length && estado.luc.length >= D.LUCIERNAGAS_NECESARIAS;
+// El cofre se abre al llegar al mirador aunque no se hayan leído todas las pistas (las luciérnagas ya abren el camino).
+const puedeAbrir = () => true;
 let secuencia = [], placaPisada = null;
 
 // ------------------------------------------------------------------ Jugador y cámara
@@ -249,13 +250,57 @@ function abrirCofre() {
   mundo.cofre.abrir();
   sonidos.final();
   aviso('El cofre se abre…', 2);
-  setTimeout(mostrarCupones, 1900);
+  setTimeout(() => { mundo.celebrar(); iniciarCine(); }, 1500);
+}
+// ---------------------------------------------------------------- Final: cinemática, carta y créditos
+let cine = null;
+function iniciarCine() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  cine = { t: 0, dur: 9 };
+  modo = 'cine';
+  $('hud').classList.add('cine');
+  aviso('Mira el cielo…', 3);
+  setTimeout(() => sonidos.logro(), 2500);
+}
+function pasoCine(dt) {
+  cine.t += dt;
+  const M = mundo.mirador, u = Math.min(1, cine.t / cine.dur);
+  const ang = Math.PI + u * 1.6, radio = 9 - u * 2;
+  camara.position.set(M.x + Math.cos(ang) * radio, M.y + 2.2 + u * 2.5, M.z + Math.sin(ang) * radio);
+  camara.lookAt(M.x + 2, M.y + 3.5 + u * 3, M.z);
+  if (cine.t >= cine.dur) {
+    cine = null;
+    $('hud').classList.remove('cine');
+    modo = 'juego';
+    colocarJugador(mundo.cofre.x - 1.2, mundo.cofre.z, 0);
+    mostrarCarta();
+  }
+}
+function mostrarCarta() {
+  abrirPanel({ sub: 'Una carta para ti', titulo: 'Para Kimberly', cuerpo: '<div class="carta" id="carta"></div>', botones: [{ texto: 'Abrir el tesoro', accion: () => setTimeout(mostrarCupones, 250) }] });
+  const caja = $('carta'), parrafos = [...D.CARTA, D.FIRMA];
+  let i = 0, j = 0, p = null;
+  const escribir = () => {
+    if (!panel.open || !caja.isConnected) return;
+    if (i >= parrafos.length) return;
+    if (!p) { p = document.createElement('p'); if (i === parrafos.length - 1) p.className = 'firma'; caja.appendChild(p); }
+    p.textContent = parrafos[i].slice(0, ++j);
+    if (j >= parrafos[i].length) { i++; j = 0; p = null; setTimeout(escribir, 420); } else setTimeout(escribir, 22);
+  };
+  escribir();
+}
+function mostrarCreditos() {
+  abrirPanel({
+    sub: 'Fin', titulo: 'Gracias por jugar',
+    cuerpo: `<p class="frase">«${D.TITULO}»</p><p class="suave">Un juego hecho por Mika para ${D.DESTINATARIA}.<br>Modelos y texturas: Poly Haven (CC0) y modelos propios hechos en Blender.<br>Música y sonidos creados con código.</p>`,
+    botones: [{ texto: 'Seguir paseando' }, { texto: 'Ver la celebración otra vez', accion: () => { mundo.celebrar(); iniciarCine(); } }],
+  });
 }
 function mostrarCupones() {
   abrirPanel({
     sub: `Hecho para ti, ${D.DESTINATARIA}`, titulo: 'El tesoro de los dos',
     cuerpo: `<ul class="cupones">${D.CUPONES.map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
-    botones: [{ texto: 'Seguir paseando' }],
+    botones: [{ texto: 'Continuar', accion: () => setTimeout(mostrarCreditos, 250) }],
   });
 }
 function atraparLuciernaga(l) {
@@ -303,18 +348,20 @@ function buscarCercano() {
 function objetivo() {
   const A = mundo.atriles, p = jugador.pos;
   const masCercana = (lista, pos) => { let m = null, d = Infinity; for (const o of lista) { const dd = pos(o).distanceTo(p); if (dd < d) { d = dd; m = o; } } return m; };
-  if (!estado.pistas[0]) return ['Lee la pista junto al arco de entrada', A[0].orbe.position];
+  // una pista que se dejó atrás ya no se pide: se sigue con lo siguiente
+  const falta = (i) => !estado.pistas[i] && p.x < A[i].x + 3;
+  if (falta(0)) return ['Lee la pista junto al arco de entrada', A[0].orbe.position];
   if (!estado.puerta) return ['Cruza la puerta que brilla como el sol', null];
-  if (!estado.pistas[1]) return ['Lee la pista a orillas del estanque', A[1].orbe.position];
+  if (falta(1)) return ['Lee la pista a orillas del estanque', A[1].orbe.position];
   if (!estado.estanque) return ['Cruza el estanque saltando de piedra en piedra', new THREE.Vector3(DISENO.controles.estanqueDespues, 0.8, 0)];
-  if (!estado.pistas[2]) return ['Lee la pista a la entrada del laberinto', A[2].orbe.position];
+  if (falta(2)) return ['Lee la pista a la entrada del laberinto', A[2].orbe.position];
   if (estado.rosas.length < D.ROSAS_NECESARIAS) {
     const r = masCercana(mundo.rosas.filter((x) => !x.tomada), (x) => x.grupo.position);
     return [`Encuentra las rosas de luz del laberinto (${estado.rosas.length}/${D.ROSAS_NECESARIAS})`, r?.grupo.position];
   }
   const L = mundo.laberinto;
   if (p.x < L.x0 + L.columnas * L.celda + 0.6) return ['Sal del laberinto por la reja de rosas', new THREE.Vector3(L.x0 + L.columnas * L.celda, 1.5, L.z0 + L.filaSalida * L.celda + 1)];
-  if (!estado.pistas[3]) return ['Lee la pista junto a la fuente', A[3].orbe.position];
+  if (falta(3)) return ['Lee la pista junto a la fuente', A[3].orbe.position];
   if (!estado.faroles) return [`Enciende los faroles en el orden de la pista (${secuencia.length}/4)`, null];
   if (p.x < DISENO.controles.barrancoDespues) return ['Cruza el barranco por el puente de piedras', new THREE.Vector3(DISENO.controles.barrancoDespues, 0.8, 0)];
   if (estado.luc.length < D.LUCIERNAGAS_NECESARIAS) {
@@ -586,6 +633,7 @@ function cuadro() {
   t += dt;
   if (mundo) {
     if (modo === 'portada') pasoPortada(t);
+    else if (modo === 'cine') { pasoJugador(0.0001); pasoCine(dt); }
     else if (modo !== 'carga') {
       if (modo === 'juego' || modo === 'panel') pasoJugador(modo === 'juego' ? dt : 0.0001);
       if (modo === 'juego') reglas();
@@ -638,7 +686,7 @@ function comenzar(continuar) {
   secuencia = [];
   if (estado.faroles) { mundo.placas.forEach((q) => q.encender(true)); mundo.puente.activar(true); }
   $('filaRosas').classList.toggle('oculta', !(estado.pistas[2] || estado.rosas.length));
-  if (estado.cofre) mundo.cofre.abrir(true);
+  if (estado.cofre) { mundo.cofre.abrir(true); mundo.celebrar(); }
   $('filaLuc').classList.toggle('oculta', !(estado.faroles || estado.luc.length));
   $('portada').hidden = true;
   fundido(() => {
@@ -728,6 +776,7 @@ function exponerPruebas() {
     atrapar: () => mundo.luciernagas.forEach((l) => !l.atrapada && atraparLuciernaga(l)),
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
     mapaVisible: () => lienzoMapa.classList.contains('ver'),
+    saltarCine: () => { if (cine) cine.t = cine.dur; },
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
     placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
     nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),
