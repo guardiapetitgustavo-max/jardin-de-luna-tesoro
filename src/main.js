@@ -1,6 +1,8 @@
 // El jardín de luna: cámara en tercera persona, controles, progreso, guardado e interfaz.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -327,6 +329,7 @@ function objetivo() {
 const reloj = new THREE.Clock();
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 let t = 0, xAnterior = 0, enAgua = false;
+const caidas = { estanque: 0, puente: 0 };
 let fps = { cuadros: 0, tiempo: 0, revisado: false };
 
 function pasoJugador(dt) {
@@ -346,7 +349,7 @@ function pasoJugador(dt) {
     dx = fx * ad - fz * de; dz = fz * ad + fx * de;
     const n = Math.hypot(dx, dz); dx /= n; dz /= n;
   }
-  const k = 1 - Math.exp(-dt * (jugador.enSuelo ? 12 : 4));
+  const k = 1 - Math.exp(-dt * (jugador.enSuelo ? 12 : 7));
   jugador.vel.x += (dx * vel - jugador.vel.x) * k;
   jugador.vel.z += (dz * vel - jugador.vel.z) * k;
 
@@ -357,11 +360,11 @@ function pasoJugador(dt) {
   mundo.resolverChoques(p, 0.27);
 
   // salto con tolerancia
-  jugador.bufferSalto = pedirSalto ? 0.14 : Math.max(0, jugador.bufferSalto - dt);
+  jugador.bufferSalto = pedirSalto ? 0.2 : Math.max(0, jugador.bufferSalto - dt);
   pedirSalto = false;
   jugador.tiempoAire = jugador.enSuelo ? 0 : jugador.tiempoAire + dt;
-  if (jugador.bufferSalto > 0 && jugador.tiempoAire < 0.12 && modo === 'juego') {
-    jugador.vy = 5.7; jugador.enSuelo = false; jugador.tiempoAire = 1; jugador.bufferSalto = 0;
+  if (jugador.bufferSalto > 0 && jugador.tiempoAire < 0.18 && modo === 'juego') {
+    jugador.vy = 6.1; jugador.enSuelo = false; jugador.tiempoAire = 1; jugador.bufferSalto = 0;
   }
   jugador.vy -= 15 * dt;
   p.y += jugador.vy * dt;
@@ -391,7 +394,9 @@ function reglas() {
   if (!enAgua && p.x > 21 && p.x < 38.5 && alturaTerreno(p.x, p.z) < NIVEL_AGUA - 0.03 && p.y < NIVEL_AGUA + 0.02) {
     enAgua = true;
     salpicar(p.x, p.z); sonidos.agua();
-    reaparecer('¡Splash! Vuelve a intentarlo saltando de piedra en piedra');
+    caidas.estanque++;
+    if (caidas.estanque >= 3 && !mundo.ayuda.estanque) { mundo.ayuda.estanque = true; setTimeout(() => aviso('Te dejé las piedras quietas para que cruces más fácil', 3.5), 900); }
+    reaparecer('¡Splash! Salta de piedra en piedra (mantén adelante y presiona saltar)');
     setTimeout(() => (enAgua = false), 700);
   }
   // puertas
@@ -420,7 +425,9 @@ function reglas() {
   // caída al barranco
   if (!enAgua && p.y < -1.3) {
     enAgua = true;
-    reaparecer('¡Cuidado con el barranco! Espera a que las piedras se acerquen');
+    caidas.puente++;
+    if (caidas.puente >= 3 && !mundo.ayuda.puente) { mundo.ayuda.puente = true; setTimeout(() => aviso('Te dejé las piedras del puente quietas', 3.5), 900); }
+    reaparecer('¡Cuidado con el barranco! Salta cuando la piedra esté cerca');
     setTimeout(() => (enAgua = false), 700);
   }
   // rosas del laberinto
@@ -648,12 +655,40 @@ function comenzar(continuar) {
 
 async function iniciar() {
   const barra = $('cargaBarra');
-  const gltf = await new GLTFLoader().loadAsync('assets/modelos.glb', (e) => {
-    if (e.total) barra.style.width = `${Math.round((e.loaded / e.total) * 70)}%`;
-  });
+  const progreso = { modelos: 0, real: 0 };
+  const pintar = () => { barra.style.width = `${Math.round(progreso.modelos * 15 + progreso.real * 60)}%`; };
+  const draco = new DRACOLoader().setDecoderPath('vendor/three/examples/jsm/libs/draco/gltf/');
+  const cargador = new GLTFLoader().setDRACOLoader(draco);
+  const texturas = new THREE.TextureLoader();
+  const tex = (nombre, color = true) => {
+    const t = texturas.load(`assets/tex/${nombre}`);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    if (color) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  const sinReal = parametros.has('simple');
+  const [gltf, real] = await Promise.all([
+    cargador.loadAsync('assets/modelos.glb', (e) => { if (e.total) { progreso.modelos = e.loaded / e.total; pintar(); } }),
+    sinReal ? null : cargador.loadAsync('assets/realista.glb', (e) => { if (e.total) { progreso.real = e.loaded / e.total; pintar(); } }).catch((e) => { console.warn('Sin modelos realistas', e); return null; }),
+  ]);
+  let texs = null;
+  if (real) {
+    texs = {
+      pasto: tex('leafy_grass_color.jpg'), senda: tex('brown_mud_leaves_01_color.jpg'), grava: tex('gravel_floor_color.jpg'), lodo: tex('mossy_rock_color.jpg'),
+      piedra: tex('rustic_stone_wall_color.jpg'), rocaMusgo: tex('mossy_rock_color.jpg'), madera: tex('brown_planks_04_color.jpg'), corteza: tex('bark_brown_02_color.jpg'),
+      hoja: tex('hoja.png'),
+    };
+    new RGBELoader().load('assets/tex/moonlit_golf_1k.hdr', (hdr) => {
+      const pm = new THREE.PMREMGenerator(renderer);
+      escena.environment = pm.fromEquirectangular(hdr).texture;
+      escena.environmentIntensity = 0.35;
+      hdr.dispose(); pm.dispose();
+    });
+  }
   $('cargaTexto').textContent = 'Plantando el jardín…'; barra.style.width = '78%';
   await new Promise((r) => setTimeout(r, 30));
-  mundo = construirMundo(escena, gltf, calidad);
+  mundo = construirMundo(escena, gltf, calidad, real, texs);
   personaje = crearPersonaje();
   escena.add(personaje.objeto);
   orbeJugador = new THREE.PointLight(0xfff0a0, 0, 6, 2);

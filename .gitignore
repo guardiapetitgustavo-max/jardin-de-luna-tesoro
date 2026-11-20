@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 unreal/
+recursos/
+tools/tripo_key.txt
