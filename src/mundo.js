@@ -37,6 +37,8 @@ export const DISENO = {
   // plataformas del puente: [x, z, mov. lateral, mov. vertical]
   puente: [[85.6, 0, 0, 0], [87.4, 0, 0.7, 0], [89.3, 0, 0, 0.3], [90.6, 0, 0, 0]],
   luciernagas: [[94.5, -4.2, 1.1], [96.4, 3.6, 1.4], [98.2, -6.4, 1.0], [100.3, 6.2, 1.3], [102.4, -1.8, 1.6], [104.6, 5.1, 0.9], [106.8, -5.6, 1.2]],
+  // corazones de cristal escondidos (x, z, altura sobre el suelo); tres más van en el laberinto
+  corazones: [[3.4, -6.6, 0.9], [13.2, 8.4, 0.9], [17.6, -7.6, 0.9], [21.6, 8.6, 0.9], [33.1, 0.2, 2.0], [80.9, -4.9, 0.9], [87.4, 0, 1.6], [103.2, -8.2, 0.9], [116.9, 2.4, 1.5]],
   barrera: 109.4,
   mirador: { x: 114.8, z: 0 },
   faroles: [2.5, 8.6, 12.4, 18.6, 21.4, 37.4, 71.3, 83.4, 92.3, 96.8, 101.2, 105.6, 108.6],
@@ -128,7 +130,8 @@ function generarLaberinto() {
     if (rosas.every((o) => Math.abs(o.i - c.i) + Math.abs(o.j - c.j) > 5)) rosas.push(c);
     if (rosas.length === 3) break;
   }
-  return { pasa, id, rosas, dist };
+  const extras = callejones.filter((c) => !rosas.includes(c)).slice(0, 3);
+  return { pasa, id, rosas, dist, extras };
 }
 
 // ------------------------------------------------------------------ Texturas realistas (triplanar: no necesitan UV)
@@ -1188,6 +1191,106 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
   }
   const celebrar = () => { fiesta.activa = true; fiesta.t = 0; };
 
+  // ================================================================ Detalles que pasan solos
+  const eventos = { alEstrella: null, alPez: null };
+  // corazones de cristal
+  const corazones = [];
+  {
+    const forma = new THREE.Shape();
+    forma.moveTo(0, -0.12); forma.bezierCurveTo(-0.02, -0.07, -0.14, -0.04, -0.14, 0.04);
+    forma.bezierCurveTo(-0.14, 0.12, -0.05, 0.14, 0, 0.07); forma.bezierCurveTo(0.05, 0.14, 0.14, 0.12, 0.14, 0.04);
+    forma.bezierCurveTo(0.14, -0.04, 0.02, -0.07, 0, -0.12);
+    const geo = new THREE.ExtrudeGeometry(forma, { depth: 0.06, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 2, curveSegments: 10 }).center();
+    const matC = new THREE.MeshPhysicalMaterial({ color: 0xff6aa8, emissive: 0xff3d8a, emissiveIntensity: 1.2, roughness: 0.1, metalness: 0, clearcoat: 1, transparent: true, opacity: 0.92 });
+    const lugares = DISENO.corazones.map(([x, z, h]) => [x, z, h]);
+    for (const c of laberinto.extras) lugares.push([LAB.x0 + c.i * LAB.celda + LAB.celda / 2, LAB.z0 + c.j * LAB.celda + LAB.celda / 2, 0.9]);
+    lugares.forEach(([x, z, h], id) => {
+      const base = x > 84.5 && x < 91 ? -0.2 + 0.36 : x > 22.8 && x < 36.2 && Math.abs(z) < 2 ? NIVEL_AGUA + 0.35 : alturaTerreno(x, z);
+      const y = base + h;
+      const m = new THREE.Mesh(geo, matC);
+      m.add(sprite(lineal(1.1, 0.3, 0.6), 0.9));
+      m.position.set(x, y, z);
+      escena.add(m);
+      const c = { id, x, y, z, malla: m, tomado: false, tomar() { this.tomado = true; m.visible = false; } };
+      actualizables.push(({ t }) => { if (!c.tomado) { m.rotation.y = t * 1.6 + id; m.position.y = y + Math.sin(t * 2 + id) * 0.07; } });
+      corazones.push(c);
+    });
+  }
+  // estrellas fugaces
+  {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    const matE = new THREE.ShaderMaterial({
+      uniforms: { a: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+      fragmentShader: 'uniform float a; varying vec2 vUv; void main(){ float l = pow(vUv.x, 3.); float w = 1. - abs(vUv.y - .5) * 2.; gl_FragColor = vec4(vec3(1.4,1.35,1.2) * l * w * w * a, 1.); }',
+    });
+    const estrella = new THREE.Mesh(geo, matE);
+    estrella.frustumCulled = false; estrella.visible = false; estrella.renderOrder = -7;
+    escena.add(estrella);
+    let espera = 12, vida = -1;
+    const ini = new THREE.Vector3(), dir = new THREE.Vector3();
+    actualizables.push(({ dt, camara }) => {
+      if (vida < 0) {
+        espera -= dt;
+        if (espera <= 0) {
+          // aparece delante de la cámara, alta en el cielo
+          const f = new THREE.Vector3(); camara.getWorldDirection(f); f.y = 0; f.normalize();
+          const lado = new THREE.Vector3(-f.z, 0, f.x);
+          ini.copy(camara.position).addScaledVector(f, 160).addScaledVector(lado, (Math.random() - 0.5) * 120); ini.y += 60 + Math.random() * 40;
+          dir.copy(lado).multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(new THREE.Vector3(0, -1, 0), 0.45).normalize();
+          vida = 0; espera = 25 + Math.random() * 35; estrella.visible = true;
+          eventos.alEstrella?.();
+        }
+        return;
+      }
+      vida += dt;
+      const u = vida / 1.3;
+      if (u >= 1) { vida = -1; estrella.visible = false; return; }
+      const cabeza = ini.clone().addScaledVector(dir, u * 90);
+      estrella.position.copy(cabeza).addScaledVector(dir, -6);
+      estrella.scale.set(14, 0.35, 1);
+      estrella.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(estrella.position, camara.position, new THREE.Vector3(0, 1, 0)));
+      // girar en su plano para alinearse con la dirección
+      const pd = dir.clone().applyQuaternion(estrella.quaternion.clone().invert());
+      estrella.rotateZ(Math.atan2(pd.y, pd.x));
+      matE.uniforms.a.value = Math.sin(u * Math.PI);
+    });
+  }
+  // peces que saltan en el estanque
+  {
+    const geo = new THREE.SphereGeometry(0.09, 12, 8).scale(2.2, 0.8, 0.9);
+    const matP = new THREE.MeshStandardMaterial({ color: 0xff8a3c, emissive: 0x6a2a00, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.2 });
+    const pez = new THREE.Mesh(geo, matP); pez.visible = false; escena.add(pez);
+    const anillosP = [];
+    const anillo = (x, z) => {
+      const m = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.17, 32), new THREE.MeshBasicMaterial({ color: 0xbfd8ff, transparent: true, opacity: 0.7, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.position.set(x, NIVEL_AGUA + 0.015, z); escena.add(m); anillosP.push({ m, e: 0 });
+    };
+    let espera = 5, t0 = -1; const a = new THREE.Vector3(), b = new THREE.Vector3();
+    actualizables.push(({ dt, jugador }) => {
+      for (let i = anillosP.length - 1; i >= 0; i--) {
+        const r = anillosP[i]; r.e += dt; r.m.scale.setScalar(1 + r.e * 5); r.m.material.opacity = Math.max(0, 0.7 - r.e * 0.7);
+        if (r.e > 1) { escena.remove(r.m); r.m.geometry.dispose(); anillosP.splice(i, 1); }
+      }
+      if (t0 < 0) {
+        espera -= dt;
+        if (espera <= 0 && jugador && jugador.x > 12 && jugador.x < 45) {
+          const x = 24 + Math.random() * 11, z = (Math.random() < 0.5 ? -1 : 1) * (2.5 + Math.random() * 6);
+          if (alturaTerreno(x, z) < NIVEL_AGUA - 0.2) {
+            a.set(x, NIVEL_AGUA, z); const g = Math.random() * 6; b.set(x + Math.cos(g) * 1.2, NIVEL_AGUA, z + Math.sin(g) * 1.2);
+            t0 = 0; pez.visible = true; anillo(x, z); eventos.alPez?.(x, z);
+          }
+          espera = 4 + Math.random() * 6;
+        }
+        return;
+      }
+      t0 += dt; const u = t0 / 0.8;
+      if (u >= 1) { t0 = -1; pez.visible = false; anillo(b.x, b.z); eventos.alPez?.(b.x, b.z); return; }
+      pez.position.lerpVectors(a, b, u); pez.position.y = NIVEL_AGUA + Math.sin(u * Math.PI) * 0.75;
+      pez.lookAt(b.x, pez.position.y + Math.cos(u * Math.PI) * 0.8, b.z); pez.rotateY(-Math.PI / 2);
+    });
+  }
+
   // ================================================================ Bucle
   let reloj = 0;
   function actualizar(t, dt, camara, foco, jugador) {
@@ -1254,5 +1357,5 @@ export function construirMundo(escena, gltf, calidad, real = null, tex = null) {
     if (p.x > 110.5) p.z = Math.min(6, Math.max(-6, p.z));
   }
 
-  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
+  return { actualizar, alturaSuelo, resolverChoques, libreCamara, ayuda, celebrar, corazones, eventos, mirador: { x: M.x, z: M.z, y: yM }, atriles, piedras, luciernagas, barrera, reja, rosas, placas, puente, cofre, agua, luzLuna, laberinto: { ...LAB, ...laberinto } };
 }

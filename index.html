@@ -49,10 +49,12 @@
   <div class="tarjeta contadores">
     <div><span class="icono pista"></span><b id="cPistas">0</b><small>/ 4 pistas</small></div>
     <div id="filaRosas" class="oculta"><span class="icono rosa"></span><b id="cRosas">0</b><small>/ 3 rosas</small></div>
+    <div id="filaCor" class="oculta"><span class="icono cor"></span><b id="cCor">0</b><small id="tCor">/ 12 corazones</small></div>
     <div id="filaLuc" class="oculta"><span class="icono luc"></span><b id="cLuc">0</b><small>/ 7 luciérnagas</small></div>
   </div>
   <button id="btnPausa" class="redondo" aria-label="Pausa">❚❚</button>
   <button id="btnSonido" class="redondo" aria-label="Sonido">♪</button>
+  <button id="btnFoto" class="redondo" aria-label="Modo foto">◉</button>
   <canvas id="mapa" aria-label="Mapa del laberinto"></canvas>
   <div id="marca"><span class="rombo"></span><span id="marcaDist">12 m</span></div>
   <div id="flecha"></div>
@@ -66,6 +68,7 @@
   <p id="ayudaRaton">Haz clic para mirar con el ratón · Esc para soltarlo</p>
 </div>
 
+<div id="barraFoto"><span>Modo foto · arrastra para mirar</span><button id="fotoGuardar" class="primario">Guardar foto</button><button id="fotoSalir" class="secundario">Salir</button></div>
 <div id="fundido"></div>
 
 <dialog id="panel">

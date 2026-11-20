@@ -32,6 +32,7 @@ export const CONTROLES = [
   ['Espacio', 'Saltar'],
   ['E', 'Leer, abrir'],
   ['Ratón', 'Mirar (haz clic en el jardín)'],
+  ['F', 'Modo foto'],
   ['Esc', 'Pausa'],
 ];
 export const CONTROLES_TACTILES = [
@@ -50,6 +51,8 @@ export const CARTA = [
   'Gracias por jugar hasta el final.',
 ];
 export const FIRMA = 'Con cariño, Mika';
+
+export const CUPON_SECRETO = ['Cupón secreto', 'Un deseo que tú elijas'];
 
 export const CUPONES = [
   ['Helado para dos', 'Tú eliges el sabor'],

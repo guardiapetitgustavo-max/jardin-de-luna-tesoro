@@ -63,7 +63,7 @@ function ajustar() {
 addEventListener('resize', ajustar);
 
 // ------------------------------------------------------------------ Estado de la aventura
-const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [] });
+const nuevoEstado = () => ({ pistas: [false, false, false, false], puerta: false, estanque: false, rosas: [], faroles: false, luc: [], cofre: false, control: null, niveles: [], visitadas: [], corazones: [], deseos: 0 });
 let estado = nuevoEstado();
 const guardar = () => { if (!parametros.has('prueba')) try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch {} };
 const cargarGuardado = () => { try { const s = JSON.parse(localStorage.getItem(CLAVE)); return s && Array.isArray(s.pistas) ? { ...nuevoEstado(), ...s } : null; } catch { return null; } };
@@ -90,6 +90,10 @@ addEventListener('keydown', (e) => {
     if (k === ' ' && !e.repeat) pedirSalto = true;
     if ((k === 'e' || k === 'enter') && !e.repeat) interactuar();
     if ((k === 'escape' || k === 'p') && !e.repeat) pausar();
+    if (k === 'f' && !e.repeat) alternarFoto();
+  } else if (modo === 'foto' && !e.repeat) {
+    if (k === 'f' || k === 'escape') alternarFoto();
+    if (k === ' ' || k === 'enter') guardarFoto();
   }
   teclas.add(k);
 });
@@ -102,7 +106,7 @@ const girar = (dx, dy, k = 0.0026) => {
 };
 let arrastre = null;
 lienzo.addEventListener('pointerdown', (e) => {
-  if (modo !== 'juego') return;
+  if (modo !== 'juego' && modo !== 'foto') return;
   if (e.pointerType === 'mouse' && !document.pointerLockElement && !parametros.has('prueba')) {
     lienzo.requestPointerLock?.()?.catch?.(() => {});
   }
@@ -110,7 +114,7 @@ lienzo.addEventListener('pointerdown', (e) => {
   lienzo.setPointerCapture(e.pointerId);
 });
 lienzo.addEventListener('pointermove', (e) => {
-  if (modo !== 'juego') return;
+  if (modo !== 'juego' && modo !== 'foto') return;
   if (document.pointerLockElement === lienzo) { girar(e.movementX, e.movementY); return; }
   if (arrastre && arrastre.id === e.pointerId) {
     girar(e.clientX - arrastre.x, e.clientY - arrastre.y, tactil ? 0.0055 : 0.004);
@@ -186,6 +190,20 @@ panel.addEventListener('close', () => {
   const f = panel._alCerrar; panel._alCerrar = null; f?.();
 });
 panel.addEventListener('cancel', (e) => { if (modo === 'portada') e.preventDefault(); });
+
+function alternarFoto() {
+  if (modo === 'juego') { modo = 'foto'; document.body.classList.add('foto'); teclas.clear(); }
+  else if (modo === 'foto') { modo = 'juego'; document.body.classList.remove('foto'); }
+}
+function guardarFoto() {
+  composer.render();
+  const a = document.createElement('a');
+  a.href = lienzo.toDataURL('image/png'); a.download = 'jardin-de-luna.png'; a.click();
+  const f = $('fundido'); f.style.background = '#fff'; f.style.opacity = '0.7'; setTimeout(() => { f.style.opacity = '0'; setTimeout(() => (f.style.background = ''), 400); }, 90);
+}
+$('btnFoto').addEventListener('click', () => alternarFoto());
+$('fotoGuardar').addEventListener('click', () => guardarFoto());
+$('fotoSalir').addEventListener('click', () => alternarFoto());
 
 function pausar() {
   if (modo !== 'juego') return;
@@ -299,7 +317,7 @@ function mostrarCreditos() {
 function mostrarCupones() {
   abrirPanel({
     sub: `Hecho para ti, ${D.DESTINATARIA}`, titulo: 'El tesoro de los dos',
-    cuerpo: `<ul class="cupones">${D.CUPONES.map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
+    cuerpo: `<ul class="cupones">${[...D.CUPONES, ...(estado.corazones.length >= mundo.corazones.length ? [D.CUPON_SECRETO] : [])].map(([t, d], i) => `<li style="animation-delay:${0.1 + i * 0.08}s">${t}<small>${d}</small></li>`).join('')}</ul><p class="suave">Elige un cupón y dime cuándo lo usamos.</p>`,
     botones: [{ texto: 'Continuar', accion: () => setTimeout(mostrarCreditos, 250) }],
   });
 }
@@ -377,6 +395,7 @@ const reloj = new THREE.Clock();
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 let t = 0, xAnterior = 0, enAgua = false;
 const caidas = { estanque: 0, puente: 0 };
+const ambiente = { buho: 15, rana: 3 };
 let fps = { cuadros: 0, tiempo: 0, revisado: false };
 
 function pasoJugador(dt) {
@@ -494,6 +513,20 @@ function reglas() {
     if (placa && placa !== placaPisada) pisarPlaca(placa);
     placaPisada = placa || null;
   }
+  // corazones de cristal escondidos
+  tmp.copy(p); tmp.y += 1.0;
+  for (const c of mundo.corazones) {
+    if (c.tomado || tmp.distanceTo(c.malla.position) > 0.95) continue;
+    c.tomar(); if (!estado.corazones.includes(c.id)) estado.corazones.push(c.id);
+    $('filaCor').classList.remove('oculta'); sonidos.corazon();
+    const n = estado.corazones.length, total = mundo.corazones.length;
+    aviso(n >= total ? '¡Encontraste todos los corazones! El cofre guarda un cupón secreto' : `Corazón de cristal ${n} de ${total}`, n >= total ? 4 : 2);
+    guardar();
+  }
+  // sonidos del ambiente
+  ambiente.buho -= 1 / 60; ambiente.rana -= 1 / 60;
+  if (ambiente.buho <= 0) { sonidos.buho(); ambiente.buho = 25 + Math.random() * 30; }
+  if (ambiente.rana <= 0) { if (p.x > 17 && p.x < 41) sonidos.rana(); ambiente.rana = 2.5 + Math.random() * 4; }
   // carteles de nivel
   const nv = D.nivelEn(p.x);
   if (nv && !estado.niveles.includes(nv.numero)) { estado.niveles.push(nv.numero); cartelNivel(nv); guardar(); }
@@ -598,6 +631,7 @@ function actualizarHUD() {
   const nv = D.nivelEn(jugador.pos.x);
   $('zona').textContent = nv.final ? nv.nombre : `Nivel ${nv.numero} · ${nv.nombre}`;
   $('cRosas').textContent = estado.rosas.length;
+  $('cCor').textContent = estado.corazones.length; $('tCor').textContent = `/ ${mundo.corazones.length} corazones`;
   $('cPistas').textContent = pistasLeidas();
   $('cLuc').textContent = estado.luc.length;
   const cerca = buscarCercano();
@@ -635,7 +669,7 @@ function cuadro() {
     if (modo === 'portada') pasoPortada(t);
     else if (modo === 'cine') { pasoJugador(0.0001); pasoCine(dt); }
     else if (modo !== 'carga') {
-      if (modo === 'juego' || modo === 'panel') pasoJugador(modo === 'juego' ? dt : 0.0001);
+      if (modo === 'juego' || modo === 'panel' || modo === 'foto') pasoJugador(modo === 'juego' ? dt : 0.0001);
       if (modo === 'juego') reglas();
       pasoCamara(dt);
       actualizarHUD();
@@ -682,6 +716,8 @@ function comenzar(continuar) {
   }
   if (estado.luc.length >= D.LUCIERNAGAS_NECESARIAS) mundo.barrera.abrir(true);
   for (const r of mundo.rosas) if (estado.rosas.includes(r.id)) r.tomar();
+  for (const c of mundo.corazones) if (estado.corazones.includes(c.id)) c.tomar();
+  $('filaCor').classList.toggle('oculta', !estado.corazones.length);
   if (estado.rosas.length >= D.ROSAS_NECESARIAS) mundo.reja.abrir(true);
   secuencia = [];
   if (estado.faroles) { mundo.placas.forEach((q) => q.encender(true)); mundo.puente.activar(true); }
@@ -737,6 +773,12 @@ async function iniciar() {
   $('cargaTexto').textContent = 'Plantando el jardín…'; barra.style.width = '78%';
   await new Promise((r) => setTimeout(r, 30));
   mundo = construirMundo(escena, gltf, calidad, real, texs);
+  mundo.eventos.alEstrella = () => {
+    if (modo !== 'juego') return;
+    estado.deseos++; sonidos.estrella();
+    aviso(estado.deseos === 1 ? 'Mira, una estrella fugaz… pide un deseo' : 'Otra estrella fugaz', 2.8);
+  };
+  mundo.eventos.alPez = (x, z) => { if (Math.hypot(jugador.pos.x - x, jugador.pos.z - z) < 14) sonidos.pez(); };
   personaje = crearPersonaje();
   escena.add(personaje.objeto);
   orbeJugador = new THREE.PointLight(0xfff0a0, 0, 6, 2);
@@ -777,6 +819,9 @@ function exponerPruebas() {
     rosas: () => mundo.rosas.map((r) => ({ x: r.x, z: r.z, tomada: r.tomada })),
     mapaVisible: () => lienzoMapa.classList.contains('ver'),
     saltarCine: () => { if (cine) cine.t = cine.dur; },
+    corazones: () => mundo.corazones.map((c) => ({ x: c.x, y: c.y, z: c.z, tomado: c.tomado })),
+    estrella: () => mundo.eventos.alEstrella?.(),
+    foto: () => alternarFoto(),
     reja: () => mundo.reja.abierta, puente: () => mundo.puente.progreso,
     placas: () => mundo.placas.map((q) => ({ nombre: q.nombre, x: q.x, z: q.z, encendida: q.encendida })),
     nenufares: () => mundo.piedras.filter((q) => q.sup.nenufar).map((q) => ({ x: q.sup.x, z: q.sup.z, tope: q.sup.tope })),

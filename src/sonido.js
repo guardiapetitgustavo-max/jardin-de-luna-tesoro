@@ -70,7 +70,23 @@ function nota(frecuencia, cuando, duracion = 0.9, volumen = 0.12, tipo = 'sine')
   o.start(t); o.stop(t + duracion + 0.05);
 }
 
+function deslizar(f0, f1, cuando, dur, vol, tipo = 'sine') {
+  if (!ctx) return;
+  const t = ctx.currentTime + cuando, o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = tipo; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(maestro); o.start(t); o.stop(t + dur + 0.05);
+}
+
 export const sonidos = {
+  buho: () => { deslizar(420, 360, 0, 0.35, 0.05); deslizar(400, 340, 0.55, 0.6, 0.05); },
+  rana: () => { for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) deslizar(180, 120, i * 0.18, 0.12, 0.04, 'square'); },
+  estrella: () => { [1568, 2093, 2637].forEach((f, i) => nota(f, i * 0.09, 1.1, 0.04)); },
+  corazon: () => { [784, 987.77, 1174.66, 1567.98].forEach((f, i) => nota(f, i * 0.07, 0.9, 0.08)); },
+  pez: () => { if (!ctx) return; const t = ctx.currentTime, n = ctx.createBufferSource(), b = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; const g = ctx.createGain(); g.gain.value = 0.12;
+    n.buffer = b; n.connect(f); f.connect(g); g.connect(maestro); n.start(t); },
   objeto: () => { nota(880, 0); nota(1318.5, 0.08); },
   pista: () => { nota(659.25, 0); nota(987.77, 0.1, 1.2, 0.08); },
   logro: () => { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => nota(f, i * 0.11, 1.4, 0.1)); },
